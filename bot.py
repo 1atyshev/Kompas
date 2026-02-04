@@ -558,6 +558,35 @@ def load_count_xp_map(tracker: Tracker) -> dict[int, int]:
     return result
 
 
+def load_count_xp_linear_rule(tracker: Tracker) -> Optional[tuple[int, int]]:
+    """Optional linear rule for count trackers stored inside xp_count_map JSON.
+
+    Example payload:
+      {"10": 2, "20": 4, "__mode": "linear", "__per": 10, "__xp": 2}
+
+    Meaning: XP grows linearly: value/per * xp (with min 1 XP for any value > 0).
+    """
+    if not tracker.xp_count_map:
+        return None
+    try:
+        data = json.loads(tracker.xp_count_map)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    mode = str(data.get("__mode") or data.get("mode") or "").strip().lower()
+    if mode != "linear":
+        return None
+    try:
+        per = int(data.get("__per") or data.get("per") or 0)
+        xp = int(data.get("__xp") or data.get("xp") or 0)
+    except (TypeError, ValueError):
+        return None
+    if per <= 0 or xp <= 0:
+        return None
+    return per, xp
+
+
 def count_value_buttons(tracker: Tracker) -> list[list[InlineKeyboardButton]]:
     mapping = load_count_xp_map(tracker)
     values = sorted(mapping.keys()) if mapping else [1, 5, 10]
@@ -593,8 +622,21 @@ def tracker_xp_for_value(tracker: Tracker, value: float, partial: bool = False) 
         mapping = load_count_xp_map(tracker)
         if mapping:
             if float(value).is_integer():
-                return int(mapping.get(int(value), 0))
+                mapped = mapping.get(int(value))
+                if mapped is not None:
+                    return int(mapped)
+            # If a linear rule is present, use it as a fallback for custom values.
+            linear = load_count_xp_linear_rule(tracker)
+            if linear:
+                per, xp_per = linear
+                earned = int((float(value) / per) * xp_per)
+                return max(1, earned)
             return 0
+        linear = load_count_xp_linear_rule(tracker)
+        if linear:
+            per, xp_per = linear
+            earned = int((float(value) / per) * xp_per)
+            return max(1, earned)
         fallback = int(tracker.xp or 0)
         fallback = min(fallback, 10) if fallback else 0
         return max(1, fallback) if fallback else 0
@@ -1942,8 +1984,8 @@ def add_tracker(
         session.add(tracker)
         session.flush()
         tracker_id = tracker.id
-    return tracker_id
     request_google_sync(user_id)
+    return tracker_id
 
 
 def tracker_progress(tracker_id: int, date: dt.date) -> Tuple[float, bool]:
@@ -3542,10 +3584,13 @@ def onboarding_presets_kb(selected: Optional[set[str]] = None) -> InlineKeyboard
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=mark("work", "💼 Работа (часы)"), callback_data="onboarding:preset:work")],
             [
+                InlineKeyboardButton(text=mark("work", "💼 Работа (часы)"), callback_data="onboarding:preset:work"),
                 InlineKeyboardButton(text=mark("meditation", "🧘 Медитация (да/нет)"), callback_data="onboarding:preset:meditation"),
-                InlineKeyboardButton(text=mark("sport", "🏋️ Спорт (да/нет)"), callback_data="onboarding:preset:sport"),
+            ],
+            [
+                InlineKeyboardButton(text=mark("reading", "📚 Чтение (страницы)"), callback_data="onboarding:preset:reading"),
+                InlineKeyboardButton(text=mark("mood", "😊 Настроение (шкала 1–10)"), callback_data="onboarding:preset:mood"),
             ],
             [InlineKeyboardButton(text=mark("custom", "➕ Своя привычка"), callback_data="onboarding:preset:custom")],
             [InlineKeyboardButton(text="✅ Готово", callback_data="onboarding:preset:done")],
@@ -3553,8 +3598,7 @@ def onboarding_presets_kb(selected: Optional[set[str]] = None) -> InlineKeyboard
     )
 
 
-def onboarding_xp_kb(tracker_id: int, per_hour: bool = False) -> InlineKeyboardMarkup:
-    suffix = "/час" if per_hour else ""
+def onboarding_xp_kb(tracker_id: int, suffix: str = "") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -3565,6 +3609,42 @@ def onboarding_xp_kb(tracker_id: int, per_hour: bool = False) -> InlineKeyboardM
             [InlineKeyboardButton(text="✏️ Свое", callback_data=f"onboarding:xp_custom:{tracker_id}")],
         ]
     )
+
+
+def apply_onboarding_xp(tracker_id: int, xp_value: int) -> None:
+    """Apply XP settings during onboarding.
+
+    Semantics depend on tracker type:
+    - time: XP per 1 hour (stored in `tracker.xp`)
+    - binary: XP per completion (stored in `tracker.xp`)
+    - scale: XP scales linearly from 1/10 to 10/10 (stored in `xp_scale_min/max`)
+    - count: XP scales linearly per 10 units (stored in `xp_count_map` JSON config)
+    """
+    tracker = get_tracker(tracker_id)
+    if not tracker:
+        return
+    xp_value = int(xp_value)
+    if xp_value <= 0:
+        return
+    if tracker.type == "scale":
+        update_tracker(tracker_id, xp=xp_value)
+        update_tracker_xp_rules(
+            tracker_id,
+            xp_scale_min=1,
+            xp_scale_max=max(1, xp_value),
+        )
+        return
+    if tracker.type == "count":
+        per = 10
+        mapping = {per: xp_value, per * 2: xp_value * 2, per * 5: xp_value * 5}
+        payload: dict[str, object] = {str(k): int(v) for k, v in mapping.items()}
+        payload["__mode"] = "linear"
+        payload["__per"] = per
+        payload["__xp"] = int(xp_value)
+        update_tracker(tracker_id, xp=xp_value)
+        update_tracker_xp_rules(tracker_id, xp_count_map=json.dumps(payload, ensure_ascii=False))
+        return
+    update_tracker(tracker_id, xp=xp_value)
 
 
 def onboarding_custom_type_kb() -> InlineKeyboardMarkup:
@@ -3632,6 +3712,33 @@ def onboarding_goal_value_kb(tracker: Tracker, period: str) -> InlineKeyboardMar
             [
                 InlineKeyboardButton(
                     text=f"{v}{tracker.unit or 'ч'}",
+                    callback_data=f"onboarding:goal_set:{tracker.id}:{period}:{v}",
+                )
+                for v in options
+            ]
+        ]
+    elif tracker.type == "count":
+        unit = (tracker.unit or "").strip()
+        if unit in {"стр", "page", "pages"}:
+            options = [30, 50, 100]
+        else:
+            options = [10, 20, 50]
+        suffix = unit or ""
+        rows = [
+            [
+                InlineKeyboardButton(
+                    text=f"{v}{suffix}",
+                    callback_data=f"onboarding:goal_set:{tracker.id}:{period}:{v}",
+                )
+                for v in options
+            ]
+        ]
+    elif tracker.type == "scale":
+        options = [6, 7, 8]
+        rows = [
+            [
+                InlineKeyboardButton(
+                    text=str(v),
                     callback_data=f"onboarding:goal_set:{tracker.id}:{period}:{v}",
                 )
                 for v in options
@@ -3841,25 +3948,38 @@ async def send_onboarding_xp_prompt(message: Message, state: FSMContext) -> None
         await state.update_data(onboarding_xp_idx=idx + 1)
         await send_onboarding_xp_prompt(message, state)
         return
-    per_hour = tracker.type == "time"
-    unit = tracker.unit or ""
-    if per_hour:
-        text = (
-            f"<b>{tracker.name}</b>\n"
-            "Зачем: XP — это “вес” привычки. Чем сложнее — тем больше XP.\n\n"
-            f"Сделай: сколько XP давать за <b>1 {unit or 'час'}</b>?"
-        )
+    unit = (tracker.unit or "").strip()
+    xp_suffix = ""
+    if tracker.type == "time":
+        xp_suffix = "/час"
+        how = f"Как отмечать: нажми → добавь часы (+1{unit}, +5{unit}) или введи число."
+        task = f"Сделай: сколько XP давать за <b>1 {unit or 'час'}</b>?"
+    elif tracker.type == "count":
+        per = 10
+        unit_label = unit or "шт"
+        xp_suffix = f"/{per}{unit_label}"
+        how = f"Как отмечать: нажми → добавь {per}{unit_label} или введи число."
+        task = f"Сделай: сколько XP давать за <b>{per} {unit_label}</b>?"
+    elif tracker.type == "scale":
+        how = "Как отмечать: нажми → выбери оценку 1–10."
+        task = "Сделай: сколько XP давать за оценку <b>10/10</b>?"
     else:
-        text = (
-            f"<b>{tracker.name}</b>\n"
-            "Зачем: XP — это “вес” привычки. Чем сложнее — тем больше XP.\n\n"
-            "Сделай: сколько XP давать за выполнение?"
-        )
-    await message.answer(text, reply_markup=onboarding_xp_kb(tracker.id, per_hour=per_hour))
+        how = "Как отмечать: нажми → появится ✅. Нажмешь снова — отмена."
+        task = "Сделай: сколько XP давать за выполнение?"
+
+    text = (
+        f"<b>{tracker.name}</b>\n"
+        "Зачем: XP — это “вес” привычки. Чем сложнее — тем больше XP.\n\n"
+        f"{how}\n\n"
+        f"{task}"
+    )
+    await message.answer(text, reply_markup=onboarding_xp_kb(tracker.id, suffix=xp_suffix))
 
 
 async def send_onboarding_today_prompt(message: Message, state: FSMContext) -> None:
-    user = get_or_create_user(message.from_user.id)
+    # In callback queries the message is authored by the bot, so `from_user.id` is the bot id.
+    # For private chats `chat.id` equals the user's tg id and works in both contexts.
+    user = get_or_create_user(message.chat.id)
     await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="today")
     await send_today(message, user)
     await message.answer(
@@ -3874,9 +3994,11 @@ async def send_onboarding_goals_prompt(message: Message, state: FSMContext) -> N
     await message.answer(
         "<b>Цели по привычкам</b>\n"
         "Зачем: цель показывает прогресс за неделю/месяц/год прямо на кнопке.\n\n"
-        "Пример:\n"
+        "Примеры:\n"
         "• Медитация: цель 5/нед → будет 2/5\n"
-        "• Работа: цель 20ч/нед → будет 6ч/20ч\n\n"
+        "• Работа: цель 20ч/нед → будет 6ч/20ч\n"
+        "• Чтение: цель 70стр/нед → будет 20стр/70стр\n"
+        "• Настроение: цель 7/10 (ср. за неделю) → будет 6.5/7\n\n"
         "Сделай: поставить цель сейчас?",
         reply_markup=onboarding_goals_choice_kb(),
     )
@@ -4242,7 +4364,7 @@ async def onboarding_cb(query, state: FSMContext) -> None:
         tracker_ids: list[int] = data.get("onboarding_tracker_ids") or []
         preset_map: dict = data.get("onboarding_preset_map") or {}
 
-        if sub in {"work", "meditation", "sport"}:
+        if sub in {"work", "meditation", "reading", "mood"}:
             if sub in preset_map:
                 await query.answer("Уже добавлено ✅", show_alert=False)
                 return
@@ -4254,8 +4376,10 @@ async def onboarding_cb(query, state: FSMContext) -> None:
                 tracker_id = add_tracker(
                     user_id=user.id, name="Медитация", type_="binary", xp=5
                 )
-            else:
-                tracker_id = add_tracker(user_id=user.id, name="Спорт", type_="binary", xp=10)
+            elif sub == "reading":
+                tracker_id = add_tracker(user_id=user.id, name="Чтение", type_="count", xp=2, unit="стр")
+            else:  # mood
+                tracker_id = add_tracker(user_id=user.id, name="Настроение", type_="scale", xp=5)
             preset_map[sub] = tracker_id
             tracker_ids.append(int(tracker_id))
             selected.add(sub)
@@ -4334,7 +4458,7 @@ async def onboarding_cb(query, state: FSMContext) -> None:
         if xp_value is None:
             await query.answer()
             return
-        update_tracker(tracker_id, xp=xp_value)
+        apply_onboarding_xp(tracker_id, xp_value)
         data = await state.get_data()
         idx = int(data.get("onboarding_xp_idx") or 0) + 1
         await state.update_data(onboarding_xp_idx=idx)
@@ -4348,14 +4472,21 @@ async def onboarding_cb(query, state: FSMContext) -> None:
             await query.answer()
             return
         tracker = get_tracker(tracker_id)
-        per_hour = bool(tracker and tracker.type == "time")
+        kind = tracker.type if tracker else ""
+        unit = ((tracker.unit or "").strip() if tracker else "")
+        if kind == "time":
+            prompt = "Введи число: сколько XP за 1 час?"
+        elif kind == "count":
+            prompt = f"Введи число: сколько XP за 10 {unit or 'шт'}?"
+        elif kind == "scale":
+            prompt = "Введи число: сколько XP за 10/10?"
+        else:
+            prompt = "Введи число: сколько XP за выполнение?"
         await state.set_state(OnboardingStates.custom_tracker_xp)
         await state.update_data(
-            onboarding_xp_custom_tracker_id=tracker_id, onboarding_xp_custom_per_hour=per_hour
+            onboarding_xp_custom_tracker_id=tracker_id
         )
-        await query.message.answer(
-            f"Введи число: сколько XP {'за 1 час' if per_hour else 'за выполнение'}?"
-        )
+        await query.message.answer(prompt)
         await query.answer()
         return
 
@@ -4394,7 +4525,15 @@ async def onboarding_cb(query, state: FSMContext) -> None:
         if not tracker or period not in {"week", "month", "year"}:
             await query.answer()
             return
-        hint = "сколько часов" if tracker.type == "time" else "сколько раз"
+        unit = (tracker.unit or "").strip()
+        if tracker.type == "time":
+            hint = "сколько часов"
+        elif tracker.type == "count":
+            hint = f"сколько {unit}" if unit else "сколько штук"
+        elif tracker.type == "scale":
+            hint = "какую среднюю оценку (1–10)"
+        else:
+            hint = "сколько раз"
         period_label = {"week": "неделю", "month": "месяц", "year": "год"}.get(period, period)
         await query.message.answer(
             f"<b>{tracker.name}</b>\n"
@@ -4531,7 +4670,7 @@ async def onboarding_custom_xp(message: Message, state: FSMContext) -> None:
     except ValueError:
         await message.answer("Нужно число. Например 5.")
         return
-    update_tracker(int(tracker_id), xp=xp_value)
+    apply_onboarding_xp(int(tracker_id), xp_value)
     await state.set_state(None)
     idx = int(data.get("onboarding_xp_idx") or 0) + 1
     await state.update_data(onboarding_xp_idx=idx)
@@ -5077,10 +5216,16 @@ async def tracker_cb(query, state: FSMContext):
             )
     elif action == "add" and tracker_id and extra:
         value = float(extra)
+        # For scale trackers "add" is actually "set rating for the day".
+        if tracker and tracker.type == "scale":
+            clear_tracker_logs(tracker_id, date)
         log_tracker(tracker_id, date, value)
         earned = tracker_xp_for_value(tracker, value) if tracker else 0
         lvl, xp, up = add_xp(user.id, earned)
-        txt = f"+{value} добавлено (+{earned} XP)"
+        if tracker and tracker.type == "scale":
+            txt = f"Оценка: {format_value(value)}/10 (+{earned} XP)"
+        else:
+            txt = f"+{value} добавлено (+{earned} XP)"
         if up:
             txt += f"\n🎉 Новый уровень: {lvl}"
         await query.message.answer(txt)
