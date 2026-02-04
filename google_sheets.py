@@ -918,7 +918,6 @@ def sync_habits_grid_with_credentials(
         sheet_map,
         today,
         count_fn,
-        sum_fn,
         avg_fn,
         arg_sep,
         tracker_objs,
