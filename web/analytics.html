@@ -1,0 +1,3930 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MUST — Analytics (offline)</title>
+    <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+      :root {
+        --bg: #0b0e14;
+        --card: rgba(21, 24, 34, 0.82);
+        --card2: rgba(27, 32, 48, 0.72);
+        --stroke: rgba(255, 255, 255, 0.1);
+        --text: #e7e9ee;
+        --muted: #aab0c0;
+        --accent: #3ddc97;
+        --good: #3ddc97;
+        --warn: #ffcc66;
+        --bad: #ff5c7a;
+        --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+        --radius: 16px;
+        --nav-height: 56px;
+        --nav-bg: rgba(12, 15, 22, 0.9);
+        --nav-active: rgba(61, 220, 151, 0.18);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        color: var(--text);
+        overflow-x: hidden;
+        background: radial-gradient(1100px 700px at 18% 0%, rgba(61, 220, 151, 0.14), transparent 55%),
+          radial-gradient(900px 600px at 86% 12%, rgba(61, 220, 151, 0.1), transparent 60%),
+          radial-gradient(900px 700px at 60% 100%, rgba(255, 204, 102, 0.07), transparent 55%),
+          var(--bg);
+      }
+      a {
+        color: inherit;
+      }
+
+      .app {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 14px 14px calc(14px + var(--nav-height) + env(safe-area-inset-bottom));
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .views {
+        display: block;
+      }
+      .view {
+        display: block;
+      }
+      .view[hidden] {
+        display: none !important;
+      }
+      .view-toggle {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+        width: 1px;
+        height: 1px;
+      }
+      #viewOverview:checked ~ #views #overviewView {
+        display: block;
+      }
+      #viewOverview:checked ~ #views #monthlyView {
+        display: none;
+      }
+      #viewMonthly:checked ~ #views #overviewView {
+        display: none;
+      }
+      #viewMonthly:checked ~ #views #monthlyView {
+        display: block;
+      }
+      .bottom-nav {
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        z-index: 70;
+        height: var(--nav-height);
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+        border-radius: 18px;
+        border: 1px solid var(--stroke);
+        background: var(--nav-bg);
+        box-shadow: var(--shadow);
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        backdrop-filter: blur(12px);
+        pointer-events: auto;
+      }
+      .bottom-nav .nav-btn {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        border-radius: 14px;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        gap: 4px;
+        transition: 0.15s ease;
+        padding: 6px 8px;
+      }
+      .bottom-nav .nav-btn.active,
+      #viewOverview:checked ~ #bottomNav label[for="viewOverview"],
+      #viewMonthly:checked ~ #bottomNav label[for="viewMonthly"] {
+        color: var(--text);
+        border-color: rgba(255, 255, 255, 0.16);
+        background: var(--nav-active);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--stroke);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+      }
+
+      .topbar {
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .brand {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        min-width: 220px;
+      }
+      .brand .title {
+        font-weight: 800;
+        letter-spacing: 0.2px;
+      }
+      .brand .hint {
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .fab {
+        position: fixed;
+        right: 16px;
+        bottom: calc(16px + var(--nav-height) + env(safe-area-inset-bottom));
+        z-index: 80;
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(21, 24, 34, 0.78);
+        box-shadow: var(--shadow);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 18px;
+        display: grid;
+        place-items: center;
+        backdrop-filter: blur(10px);
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      }
+      .fab:hover {
+        transform: translateY(-1px);
+        border-color: rgba(255, 255, 255, 0.28);
+      }
+      .controls-popover {
+        position: fixed;
+        right: 16px;
+        bottom: calc(68px + var(--nav-height) + env(safe-area-inset-bottom));
+        z-index: 80;
+        width: min(560px, calc(100vw - 32px));
+        padding: 12px;
+      }
+      .controls-popover .head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .controls-popover .head .title {
+        font-weight: 800;
+        font-size: 12px;
+        letter-spacing: 0.2px;
+        color: var(--muted);
+      }
+      .controls-popover .controls {
+        justify-content: flex-start;
+      }
+      .controls-popover .btn {
+        padding: 8px 10px;
+        font-size: 11px;
+      }
+      .controls-popover .status {
+        margin-top: 8px;
+      }
+      .auth-card {
+        display: none;
+      }
+      .auth-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .auth-widget {
+        min-height: 44px;
+      }
+      .h-left {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .h-sub {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .btn {
+        appearance: none;
+        border: 1px solid var(--stroke);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: 0.15s ease;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .btn.ghost {
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+      }
+      .file {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px dashed rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: 12px;
+      }
+      .file strong {
+        font-size: 12px;
+      }
+      input[type="file"] {
+        color: var(--muted);
+        font-size: 12px;
+        max-width: 240px;
+      }
+      select {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--stroke);
+        color: var(--text);
+        padding: 10px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        outline: none;
+      }
+      .status {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .status.error {
+        color: var(--bad);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 12px;
+        align-items: start;
+      }
+      @media (max-width: 1020px) {
+        .layout {
+          grid-template-columns: 1fr;
+          display: flex;
+          flex-direction: column;
+        }
+        .brand .hint {
+          display: none;
+        }
+        .layout > .col.main-grid {
+          order: -1;
+        }
+        .layout > .col:not(.main-grid) {
+          order: 1;
+        }
+        #heatmapCard {
+          order: 1;
+        }
+        #goalsCard {
+          order: 2;
+        }
+        #trendsCard {
+          order: 3;
+        }
+        #habitsCard {
+          order: 4;
+        }
+      }
+
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .main-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .main-grid .span-2 {
+        grid-column: 1 / -1;
+      }
+      @media (max-width: 1200px) {
+        .main-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .section {
+        padding: 12px;
+      }
+      .section .h {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .section .h .t {
+        font-weight: 800;
+        font-size: 13px;
+        letter-spacing: 0.2px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pill {
+        font-size: 11px;
+        padding: 7px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--stroke);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .pill.good {
+        border-color: rgba(61, 220, 151, 0.3);
+        background: rgba(61, 220, 151, 0.12);
+        color: #c9ffea;
+      }
+      .pill.warn {
+        border-color: rgba(255, 204, 102, 0.32);
+        background: rgba(255, 204, 102, 0.1);
+        color: #ffe8b8;
+      }
+      .pill.bad {
+        border-color: rgba(255, 92, 122, 0.32);
+        background: rgba(255, 92, 122, 0.1);
+        color: #ffd0da;
+      }
+
+      .player {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .player .name {
+        font-weight: 850;
+        font-size: 16px;
+        letter-spacing: 0.2px;
+      }
+      .player .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .progress {
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+      .progress > div {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(61, 220, 151, 0.55), rgba(61, 220, 151, 0.95));
+        transition: width 220ms ease;
+      }
+      .kpis {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .kpi {
+        background: var(--card2);
+        border: 1px solid var(--stroke);
+        border-radius: 14px;
+        padding: 10px;
+      }
+      .kpi .label {
+        color: var(--muted);
+        font-size: 11px;
+        margin-bottom: 6px;
+      }
+      .kpi .value {
+        font-size: 16px;
+        font-weight: 800;
+      }
+      .kpi .sub {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .today-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .mission-card {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .mission-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .mission-label {
+        font-weight: 800;
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .mission-text {
+        font-size: 14px;
+        line-height: 1.35;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 10px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .row .left {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .row .left .primary {
+        font-weight: 750;
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .row .left .secondary {
+        font-size: 11px;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .row .right {
+        font-weight: 800;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .heatmap-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .heatmap-legend {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .legend-scale {
+        display: grid;
+        grid-auto-flow: column;
+        gap: 4px;
+      }
+      .legend-cell {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .legend-cell.l1 {
+        background: rgba(61, 220, 151, 0.18);
+      }
+      .legend-cell.l2 {
+        background: rgba(61, 220, 151, 0.32);
+      }
+      .legend-cell.l3 {
+        background: rgba(61, 220, 151, 0.52);
+      }
+      .legend-cell.l4 {
+        background: rgba(61, 220, 151, 0.78);
+      }
+      .heatmap {
+        --gap: 4px;
+        display: grid;
+        grid-auto-flow: column;
+        grid-template-rows: repeat(7, 1fr);
+        grid-auto-columns: minmax(0, 1fr);
+        gap: var(--gap);
+        overflow: hidden;
+        padding-bottom: 2px;
+        width: 100%;
+      }
+      .cell {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .cell.l1 {
+        background: rgba(61, 220, 151, 0.18);
+      }
+      .cell.l2 {
+        background: rgba(61, 220, 151, 0.32);
+      }
+      .cell.l3 {
+        background: rgba(61, 220, 151, 0.52);
+      }
+      .cell.l4 {
+        background: rgba(61, 220, 151, 0.78);
+      }
+      .cell.outside {
+        opacity: 0.25;
+      }
+      .cell.future {
+        opacity: 0.45;
+      }
+
+      .chart {
+        position: relative;
+        height: 170px;
+      }
+
+      .habits-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+      @media (max-width: 1200px) {
+        .habits-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 900px) {
+        .habits-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .habit {
+        background: var(--card2);
+        border: 1px solid var(--stroke);
+        border-radius: 16px;
+        padding: 12px;
+        display: grid;
+        gap: 8px;
+      }
+      .habit-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .habit-title {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .habit-name {
+        font-weight: 850;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .habit-meta {
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .habit-badge {
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        font-weight: 850;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .habit-chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+      }
+      .habit-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        font-size: 10.5px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .habit-chip strong {
+        color: var(--text);
+        font-weight: 700;
+      }
+      .habit-chip.muted {
+        color: rgba(170, 176, 192, 0.85);
+      }
+
+      .goal-table {
+        display: grid;
+        gap: 8px;
+      }
+      .goal-table-body {
+        display: grid;
+        gap: 8px;
+      }
+      .goal-table-body .empty {
+        grid-column: 1 / -1;
+      }
+      .goal-table-head,
+      .goal-table-row {
+        display: grid;
+        grid-template-columns: minmax(140px, 1.1fr) repeat(3, minmax(140px, 1fr));
+        gap: 10px;
+        align-items: center;
+      }
+      .goal-table-head {
+        color: var(--muted);
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        padding: 0 6px;
+      }
+      .goal-table-row {
+        background: var(--card2);
+        border: 1px solid var(--stroke);
+        border-radius: 14px;
+        padding: 8px 10px;
+      }
+      .goal-name {
+        font-weight: 800;
+        font-size: 12.5px;
+        letter-spacing: 0.1px;
+      }
+      .goal-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      .goal-label {
+        display: none;
+        color: var(--muted);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .goal-metric {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        font-size: 11px;
+      }
+      .goal-metric strong {
+        font-weight: 700;
+      }
+      .goal-metric span {
+        color: var(--muted);
+      }
+      .goal-bar {
+        height: 5px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+      .goal-bar > div {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(61, 220, 151, 0.55), rgba(61, 220, 151, 0.95));
+        width: 0%;
+        transition: width 0.2s ease;
+      }
+      .goal-compact-grid {
+        display: none;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .goal-compact {
+        background: var(--card2);
+        border: 1px solid var(--stroke);
+        border-radius: 12px;
+        padding: 8px;
+        display: grid;
+        gap: 6px;
+      }
+      .goal-compact-title {
+        font-weight: 800;
+        font-size: 12px;
+        letter-spacing: 0.1px;
+      }
+      .goal-compact-metric {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        font-size: 10.5px;
+        color: var(--muted);
+      }
+      .goal-compact-metric strong {
+        color: var(--text);
+        font-weight: 700;
+      }
+      .goal-compact-bar {
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+      .goal-compact-bar > div {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(61, 220, 151, 0.55), rgba(61, 220, 151, 0.95));
+        width: 0%;
+        transition: width 0.2s ease;
+      }
+      .month-controls {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .month-controls .btn {
+        padding: 6px 10px;
+        font-size: 11px;
+      }
+      .month-header {
+        display: grid;
+        gap: 10px;
+      }
+      .month-title-block {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .month-title {
+        font-weight: 800;
+        font-size: 26px;
+        letter-spacing: 0.2px;
+      }
+      .month-kpis {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .month-kpi {
+        background: var(--card2);
+        border: 1px solid var(--stroke);
+        border-radius: 12px;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .month-kpi .label {
+        color: var(--muted);
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .month-kpi .value {
+        font-weight: 800;
+        font-size: 15px;
+      }
+      .month-kpi .sub {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .kpi-bar {
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+      }
+      .kpi-bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, rgba(61, 220, 151, 0.4), rgba(61, 220, 151, 0.95));
+        width: 0%;
+      }
+      .monthly-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 240px;
+        gap: 12px;
+      }
+      .monthly-grid-wrap {
+        border-radius: 14px;
+        border: 1px solid var(--stroke);
+        background: rgba(15, 18, 28, 0.65);
+        padding: 8px;
+        overflow: hidden;
+      }
+      .monthly-grid {
+        display: grid;
+        gap: 2px;
+        --month-day: 10px;
+        --month-gap: 2px;
+      }
+      .monthly-grid.compact .dow-cell,
+      .monthly-grid.compact .footer-cell {
+        font-size: 7px;
+      }
+      .monthly-grid.ultra .dow-cell,
+      .monthly-grid.ultra .footer-cell {
+        font-size: 6px;
+      }
+      .monthly-grid-row {
+        display: grid;
+        align-items: center;
+        column-gap: var(--month-gap);
+        min-width: 0;
+      }
+      .monthly-grid-row.week-header {
+        margin-bottom: 2px;
+      }
+      .monthly-head {
+        color: var(--muted);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 4px 6px 4px 0;
+      }
+      .week-label {
+        text-align: center;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 0;
+        border-radius: 8px;
+      }
+      .dow-cell {
+        font-size: 9px;
+        color: var(--muted);
+        text-align: center;
+        letter-spacing: 0.04em;
+        height: var(--month-day);
+        line-height: 1;
+        display: grid;
+        place-items: center;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .habit-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-right: 6px;
+        min-width: 0;
+      }
+      .habit-cell .name {
+        font-weight: 700;
+        font-size: 11px;
+        line-height: 1.2;
+        word-break: break-word;
+      }
+      .habit-cell .meta {
+        color: var(--muted);
+        font-size: 9px;
+      }
+      .day-cell {
+        width: var(--month-day);
+        height: var(--month-day);
+        border-radius: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.03);
+        align-self: center;
+      }
+      .day-cell.done {
+        background: rgba(61, 220, 151, 0.9);
+        border-color: rgba(61, 220, 151, 0.9);
+      }
+      .day-cell.partial {
+        background: rgba(61, 220, 151, 0.35);
+        border-color: rgba(61, 220, 151, 0.5);
+      }
+      .day-cell.empty {
+        opacity: 0.2;
+        border-color: rgba(255, 255, 255, 0.08);
+        background: transparent;
+      }
+      .footer-label {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 600;
+        padding-right: 6px;
+      }
+      .footer-cell {
+        font-size: 9px;
+        text-align: center;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+        height: var(--month-day);
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .footer-cell.muted {
+        color: var(--muted);
+      }
+      .week-1.week-label,
+      .week-1.dow-cell,
+      .week-1.footer-cell,
+      .day-cell.week-1:not(.done):not(.partial):not(.empty) {
+        background: rgba(61, 220, 151, 0.08);
+      }
+      .week-2.week-label,
+      .week-2.dow-cell,
+      .week-2.footer-cell,
+      .day-cell.week-2:not(.done):not(.partial):not(.empty) {
+        background: rgba(61, 220, 151, 0.12);
+      }
+      .week-3.week-label,
+      .week-3.dow-cell,
+      .week-3.footer-cell,
+      .day-cell.week-3:not(.done):not(.partial):not(.empty) {
+        background: rgba(61, 220, 151, 0.16);
+      }
+      .week-4.week-label,
+      .week-4.dow-cell,
+      .week-4.footer-cell,
+      .day-cell.week-4:not(.done):not(.partial):not(.empty) {
+        background: rgba(61, 220, 151, 0.2);
+      }
+      .week-5.week-label,
+      .week-5.dow-cell,
+      .week-5.footer-cell,
+      .day-cell.week-5:not(.done):not(.partial):not(.empty) {
+        background: rgba(61, 220, 151, 0.24);
+      }
+      .monthly-analysis {
+        border-radius: 14px;
+        border: 1px solid var(--stroke);
+        background: rgba(15, 18, 28, 0.65);
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+      }
+      .analysis-head {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .analysis-head span {
+        padding: 6px 8px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .analysis-list {
+        display: grid;
+        gap: 6px;
+        overflow: auto;
+        max-height: 420px;
+      }
+      .analysis-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 76px;
+        gap: 6px;
+        align-items: center;
+      }
+      .analysis-name {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .analysis-metric {
+        display: grid;
+        gap: 4px;
+      }
+      .analysis-value {
+        font-size: 9px;
+        color: var(--muted);
+        text-align: right;
+      }
+      .analysis-bar {
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+      }
+      .analysis-bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, rgba(61, 220, 151, 0.4), rgba(61, 220, 151, 0.95));
+        width: 0%;
+      }
+      @media (max-width: 980px) {
+        .goal-table-head,
+        .goal-table-row {
+          grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(120px, 1fr));
+        }
+      }
+      @media (max-width: 720px) {
+        .app {
+          padding: 10px 10px calc(14px + var(--nav-height) + env(safe-area-inset-bottom));
+        }
+        .section {
+          padding: 10px;
+        }
+        .pill {
+          padding: 6px 8px;
+          font-size: 10px;
+        }
+        .player .name {
+          font-size: 18px;
+        }
+        .kpis {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .player .meta {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .habit {
+          padding: 10px;
+          gap: 6px;
+        }
+        .habits-grid {
+          gap: 8px;
+        }
+        .habit-name {
+          white-space: normal;
+          line-height: 1.2;
+        }
+        .habit-meta {
+          display: none;
+        }
+        .habit-chip {
+          font-size: 10px;
+          padding: 4px 7px;
+        }
+        .habit-badge {
+          font-size: 10px;
+          padding: 5px 8px;
+        }
+        .habit-chip.hide-mobile {
+          display: none;
+        }
+        .month-title {
+          font-size: 20px;
+        }
+        .month-kpis {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .monthly-layout {
+          grid-template-columns: 1fr;
+        }
+        .analysis-list {
+          max-height: none;
+        }
+        .monthly-grid-row {
+          padding: 2px 0;
+        }
+        .chart {
+          height: 160px;
+        }
+        .goal-table {
+          display: none;
+        }
+        .goal-compact-grid {
+          display: grid;
+        }
+        .goals-hint {
+          display: none;
+        }
+        .controls-popover {
+          left: 12px;
+          right: 12px;
+          bottom: calc(70px + var(--nav-height) + env(safe-area-inset-bottom));
+          width: auto;
+        }
+        .fab {
+          right: 12px;
+          bottom: calc(12px + var(--nav-height) + env(safe-area-inset-bottom));
+        }
+        .heatmap {
+          --gap: 2px;
+        }
+        .legend-cell {
+          width: 8px;
+          height: 8px;
+        }
+      }
+      @media (max-width: 420px) {
+        .kpis {
+          grid-template-columns: 1fr;
+        }
+        .goal-compact-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .empty {
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px dashed rgba(255, 255, 255, 0.14);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .loading-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: radial-gradient(900px 600px at 20% 0%, rgba(61, 220, 151, 0.08), transparent 60%),
+          radial-gradient(700px 520px at 80% 10%, rgba(61, 220, 151, 0.08), transparent 60%),
+          rgba(8, 10, 16, 0.88);
+        backdrop-filter: blur(8px);
+      }
+      .loading-card {
+        width: min(360px, 92vw);
+        padding: 20px;
+        border-radius: 16px;
+        border: 1px solid var(--stroke);
+        background: rgba(21, 24, 34, 0.9);
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        box-shadow: var(--shadow);
+      }
+      .loading-card.error {
+        border-color: rgba(255, 92, 122, 0.5);
+      }
+      .loading-title {
+        font-weight: 800;
+        font-size: 14px;
+        letter-spacing: 0.2px;
+      }
+      .loading-sub {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .spinner {
+        width: 38px;
+        height: 38px;
+        margin: 0 auto;
+        border-radius: 50%;
+        border: 3px solid rgba(255, 255, 255, 0.12);
+        border-top-color: var(--accent);
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="app">
+      <section class="card section auth-card" id="authCard" hidden>
+        <div class="h">
+          <div class="t">🔐 Вход через Telegram</div>
+        </div>
+        <div class="muted" id="authHint">Открой мини‑апп через бота.</div>
+        <div class="auth-actions">
+          <a class="btn" id="openInTelegram" href="#" target="_blank" rel="noopener">Открыть в Telegram</a>
+          <button class="btn ghost" id="retryAuth" type="button" hidden>Повторить вход</button>
+          <div id="tgLoginWidget" class="auth-widget"></div>
+        </div>
+        <div class="status" id="authStatus"></div>
+      </section>
+      <input class="view-toggle" type="radio" name="analyticsView" id="viewOverview" checked />
+      <input class="view-toggle" type="radio" name="analyticsView" id="viewMonthly" />
+
+      <div class="views" id="views">
+        <div class="view" id="overviewView">
+          <div class="layout" id="layout">
+            <div class="col">
+          <section class="card section" id="todayCard">
+            <div class="h">
+              <div class="t">🎯 Миссия дня</div>
+              <div class="pill" id="todayDate">—</div>
+            </div>
+            <div class="today-list" id="todayList">
+              <div class="empty">Загрузи базу, чтобы увидеть миссию дня.</div>
+            </div>
+          </section>
+
+          <section class="card section" id="journalCard">
+            <div class="h">
+              <div class="t">🗒 Дневник</div>
+              <div class="pill" id="journalStat">—</div>
+            </div>
+            <div class="muted" id="journalBody">—</div>
+          </section>
+        </div>
+
+        <div class="col main-grid">
+          <section class="card section span-2" id="heatmapCard">
+            <div class="h">
+              <div class="h-left">
+                <div class="t">🗓 Активность</div>
+                <div class="h-sub" id="heatmapSub">Год · каждый квадрат — день · XP + события</div>
+              </div>
+              <div class="pill" id="heatmapStat">—</div>
+            </div>
+            <div class="heatmap-wrap">
+              <div class="heatmap-legend">
+                <span>меньше</span>
+                <div class="legend-scale">
+                  <span class="legend-cell"></span>
+                  <span class="legend-cell l1"></span>
+                  <span class="legend-cell l2"></span>
+                  <span class="legend-cell l3"></span>
+                  <span class="legend-cell l4"></span>
+                </div>
+                <span>больше</span>
+              </div>
+              <div class="heatmap" id="heatmap"></div>
+            </div>
+          </section>
+
+          <section class="card section span-2" id="goalsCard">
+            <div class="h">
+              <div class="t">🎯 Цели</div>
+              <div class="pill" id="goalsStatTotal">—</div>
+            </div>
+            <div class="muted goals-hint">Факт/план · % выполнения · 🔥 стрик</div>
+            <div class="goal-table">
+              <div class="goal-table-head">
+                <div>Привычка</div>
+                <div>Год</div>
+                <div>Месяц</div>
+                <div>Неделя</div>
+              </div>
+              <div id="goalsTable" class="goal-table-body"></div>
+            </div>
+            <div class="goal-compact-grid" id="goalsCompact"></div>
+          </section>
+
+          <section class="card section span-2" id="trendsCard">
+            <div class="h">
+              <div class="t">📈 XP по дням</div>
+              <div class="pill" id="trendStat">—</div>
+            </div>
+            <div class="chart">
+              <canvas id="xpChart"></canvas>
+            </div>
+          </section>
+        </div>
+          </div>
+        </div>
+
+        <div class="view" id="monthlyView">
+          <section class="card section" id="monthlyHeaderCard">
+            <div class="month-header">
+              <div class="month-title-block">
+                <div class="month-title" id="monthLabel">—</div>
+                <div class="month-controls">
+                  <button class="btn ghost" id="monthPrevBtn" type="button">←</button>
+                  <button class="btn ghost" id="monthNextBtn" type="button">→</button>
+                </div>
+              </div>
+              <div class="month-kpis">
+                <div class="month-kpi">
+                  <div class="label">Кол-во привычек</div>
+                  <div class="value" id="monthHabits">—</div>
+                  <div class="sub" id="monthGoalsStat">—</div>
+                </div>
+                <div class="month-kpi">
+                  <div class="label">Кол-во выполненных привычек</div>
+                  <div class="value" id="monthCompletions">—</div>
+                  <div class="sub" id="monthActiveDays">—</div>
+                </div>
+                <div class="month-kpi">
+                  <div class="label">Еженедельный прогресс</div>
+                  <div class="kpi-bar"><span id="monthAvgProgressBar"></span></div>
+                  <div class="sub" id="monthAvgProgress">—</div>
+                </div>
+                <div class="month-kpi">
+                  <div class="label">Прогресс %</div>
+                  <div class="value" id="monthProgressStat">—</div>
+                  <div class="sub" id="monthBestDay">—</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card section" id="monthlyTableCard">
+            <div class="h">
+              <div class="t">📋 Привычки и цели</div>
+              <div class="pill" id="monthlyTableStat">—</div>
+            </div>
+            <div class="monthly-layout" id="monthlyTable"></div>
+          </section>
+
+          <section class="card section" id="monthlyChartCard">
+            <div class="h">
+              <div class="t">📈 Прогресс по дням</div>
+              <div class="pill" id="monthlyChartStat">—</div>
+            </div>
+            <div class="chart monthly-chart">
+              <canvas id="monthlyChart"></canvas>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="bottom-nav" id="bottomNav">
+        <label class="nav-btn" for="viewOverview" data-view="overview">Общее</label>
+        <label class="nav-btn" for="viewMonthly" data-view="monthly">Ежемесячник</label>
+      </div>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="loading-card" id="loadingCard">
+        <div class="spinner"></div>
+        <div class="loading-title">Загружаю аналитику…</div>
+        <div class="loading-sub" id="loadingSub">Подключаю данные.</div>
+        <button class="btn ghost" id="loadingRetry" type="button" hidden>Повторить</button>
+      </div>
+    </div>
+
+    <div class="card controls-popover" id="controlsPopover" hidden>
+      <div class="head">
+        <div class="title">Загрузка · фильтры</div>
+        <button class="btn ghost" id="controlsCloseBtn">Закрыть</button>
+      </div>
+      <div class="controls">
+        <button class="btn" id="demoBtn">Демо-год</button>
+        <button class="btn ghost" id="autoBtn">bot.db</button>
+        <button class="btn ghost" id="pickFileBtn">Выбрать bot.db</button>
+        <input id="dbFile" type="file" accept=".db,.sqlite,application/octet-stream" hidden />
+        <select id="userSelect" disabled>
+          <option>Пользователь…</option>
+        </select>
+        <select id="rangeSelect" disabled>
+          <option value="30">30 дней</option>
+          <option value="90">90 дней</option>
+          <option value="365">365 дней</option>
+        </select>
+      </div>
+      <div id="status" class="status">Загрузка движка SQLite…</div>
+    </div>
+
+    <script>
+      const ui = {
+        dbFile: document.getElementById("dbFile"),
+        userSelect: document.getElementById("userSelect"),
+        rangeSelect: document.getElementById("rangeSelect"),
+        demoBtn: document.getElementById("demoBtn"),
+        autoBtn: document.getElementById("autoBtn"),
+        pickFileBtn: document.getElementById("pickFileBtn"),
+        controlsFab: document.getElementById("controlsFab"),
+        controlsPopover: document.getElementById("controlsPopover"),
+        controlsCloseBtn: document.getElementById("controlsCloseBtn"),
+        status: document.getElementById("status"),
+        views: document.getElementById("views"),
+        overviewView: document.getElementById("overviewView"),
+        monthlyView: document.getElementById("monthlyView"),
+        bottomNav: document.getElementById("bottomNav"),
+        viewOverviewToggle: document.getElementById("viewOverview"),
+        viewMonthlyToggle: document.getElementById("viewMonthly"),
+        authCard: document.getElementById("authCard"),
+        authHint: document.getElementById("authHint"),
+        authStatus: document.getElementById("authStatus"),
+        openInTelegram: document.getElementById("openInTelegram"),
+        retryAuth: document.getElementById("retryAuth"),
+        tgLoginWidget: document.getElementById("tgLoginWidget"),
+        loadingOverlay: document.getElementById("loadingOverlay"),
+        loadingCard: document.getElementById("loadingCard"),
+        loadingSub: document.getElementById("loadingSub"),
+        loadingRetry: document.getElementById("loadingRetry"),
+        monthPrevBtn: document.getElementById("monthPrevBtn"),
+        monthNextBtn: document.getElementById("monthNextBtn"),
+        monthLabel: document.getElementById("monthLabel"),
+        monthHabits: document.getElementById("monthHabits"),
+        monthCompletions: document.getElementById("monthCompletions"),
+        monthAvgProgress: document.getElementById("monthAvgProgress"),
+        monthAvgProgressBar: document.getElementById("monthAvgProgressBar"),
+        monthBestDay: document.getElementById("monthBestDay"),
+        monthGoalsStat: document.getElementById("monthGoalsStat"),
+        monthActiveDays: document.getElementById("monthActiveDays"),
+        monthProgressStat: document.getElementById("monthProgressStat"),
+        monthlyTableStat: document.getElementById("monthlyTableStat"),
+        monthlyTable: document.getElementById("monthlyTable"),
+        monthlyChartStat: document.getElementById("monthlyChartStat"),
+        monthlyChart: document.getElementById("monthlyChart"),
+        // player
+        playerTz: document.getElementById("playerTz"),
+        playerName: document.getElementById("playerName"),
+        playerMeta: document.getElementById("playerMeta"),
+        xpBar: document.getElementById("xpBar"),
+        kpiLevel: document.getElementById("kpiLevel"),
+        kpiXp: document.getElementById("kpiXp"),
+        kpiStreak: document.getElementById("kpiStreak"),
+        kpiActiveDays: document.getElementById("kpiActiveDays"),
+        kpiXpRange: document.getElementById("kpiXpRange"),
+        kpiXpBestDay: document.getElementById("kpiXpBestDay"),
+        kpiHabits: document.getElementById("kpiHabits"),
+        kpiBestHabit: document.getElementById("kpiBestHabit"),
+        // today
+        todayDate: document.getElementById("todayDate"),
+        todayList: document.getElementById("todayList"),
+        // journal
+        journalStat: document.getElementById("journalStat"),
+        journalBody: document.getElementById("journalBody"),
+        // heatmap
+        heatmap: document.getElementById("heatmap"),
+        heatmapSub: document.getElementById("heatmapSub"),
+        heatmapStat: document.getElementById("heatmapStat"),
+        // trends
+        xpChart: document.getElementById("xpChart"),
+        trendStat: document.getElementById("trendStat"),
+        // habits
+        habitsGrid: document.getElementById("habitsGrid"),
+        habitsStat: document.getElementById("habitsStat"),
+        goalsStatTotal: document.getElementById("goalsStatTotal"),
+        goalsTable: document.getElementById("goalsTable"),
+        goalsCompact: document.getElementById("goalsCompact"),
+      };
+
+      (function stripTokenFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has("token")) return;
+        params.delete("token");
+        const query = params.toString();
+        const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+        window.history.replaceState({}, "", nextUrl);
+      })();
+
+      function setLoading(show, text = "", isError = false) {
+        if (show) {
+          ui.loadingOverlay.hidden = false;
+          ui.loadingOverlay.style.display = "grid";
+        } else {
+          ui.loadingOverlay.hidden = true;
+          ui.loadingOverlay.style.display = "none";
+        }
+        ui.loadingCard.classList.toggle("error", Boolean(isError));
+        ui.loadingSub.textContent = text || "";
+        ui.loadingRetry.hidden = !isError;
+        if (ui.views) ui.views.style.display = show ? "none" : "block";
+        if (ui.bottomNav) ui.bottomNav.hidden = show;
+        if (show) {
+          closeControlsPopover();
+        }
+      }
+
+      const state = {
+        SQL: null,
+        db: null,
+        users: [],
+        selectedUserId: null,
+        rangeDays: 30,
+        chart: null,
+        monthChart: null,
+        monthOffset: 0,
+        monthlyData: null,
+        activeView: "overview",
+        lastDbLoadedAt: 0,
+        dbRefreshInFlight: null,
+        dataSource: "",
+      };
+
+      initView();
+
+      function openControlsPopover() {
+        ui.controlsPopover.hidden = false;
+      }
+
+      function closeControlsPopover() {
+        ui.controlsPopover.hidden = true;
+      }
+
+      function toggleControlsPopover() {
+        ui.controlsPopover.hidden = !ui.controlsPopover.hidden;
+      }
+
+      function setActiveView(view) {
+        const next = view === "monthly" ? "monthly" : "overview";
+        state.activeView = next;
+        if (ui.viewOverviewToggle) ui.viewOverviewToggle.checked = next === "overview";
+        if (ui.viewMonthlyToggle) ui.viewMonthlyToggle.checked = next === "monthly";
+        try {
+          localStorage.setItem("analytics_view", next);
+        } catch (_error) {
+          // ignore
+        }
+        window.scrollTo(0, 0);
+        if (next === "monthly") {
+          requestAnimationFrame(() => renderMonthlyView());
+        }
+      }
+
+      function initView() {
+        let saved = "overview";
+        try {
+          const stored = localStorage.getItem("analytics_view");
+          if (stored === "monthly" || stored === "overview") saved = stored;
+        } catch (_error) {
+          // ignore
+        }
+        setActiveView(saved);
+      }
+
+      function xpNeeded(level) {
+        const safeLevel = Math.max(1, Number(level || 1));
+        return Math.floor(100 + 15 * (safeLevel - 1) + Math.pow(safeLevel - 1, 1.35) * 5);
+      }
+
+      function tzOffsetMinutes(tz) {
+        if (!tz) return 0;
+        const upper = String(tz).trim().toUpperCase();
+        if (upper === "UTC" || upper === "GMT") return 0;
+        const match = upper.match(/^(UTC|GMT)\s*([+-])\s*(\d{1,2})(?::(\d{2}))?$/);
+        if (!match) return 0;
+        const sign = match[2] === "+" ? 1 : -1;
+        const hours = Number(match[3] || 0);
+        const minutes = Number(match[4] || 0);
+        return sign * (hours * 60 + minutes);
+      }
+
+      function todayKeyForTz(tz) {
+        const offset = tzOffsetMinutes(tz);
+        const shifted = new Date(Date.now() + offset * 60_000);
+        return dateToKey(shifted);
+      }
+
+      function dateToKey(date) {
+        const yyyy = String(date.getUTCFullYear()).padStart(4, "0");
+        const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+        const dd = String(date.getUTCDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      function keyToDate(key) {
+        const parts = String(key).split("-").map((x) => Number(x));
+        if (parts.length < 3 || parts.some((x) => Number.isNaN(x))) return new Date(Date.UTC(1970, 0, 1));
+        return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+      }
+
+      function addDaysKey(key, days) {
+        const date = keyToDate(key);
+        date.setUTCDate(date.getUTCDate() + days);
+        return dateToKey(date);
+      }
+
+      function yearRangeForKey(key) {
+        const date = keyToDate(key);
+        const year = date.getUTCFullYear();
+        const start = new Date(Date.UTC(year, 0, 1));
+        const end = new Date(Date.UTC(year, 11, 31));
+        const totalDays = Math.round((end - start) / 86_400_000) + 1;
+        return {
+          year,
+          startKey: dateToKey(start),
+          endKey: dateToKey(end),
+          totalDays,
+        };
+      }
+
+      function formatDateRu(key) {
+        const date = keyToDate(key);
+        return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "long", year: "numeric" }).format(date);
+      }
+
+      const fmtDay = new Intl.DateTimeFormat("ru-RU", { day: "2-digit" });
+      const fmtMonthShort = new Intl.DateTimeFormat("ru-RU", { month: "short" });
+
+      function formatDayMonthRu(key) {
+        const date = keyToDate(key);
+        const day = fmtDay.format(date);
+        const month = fmtMonthShort.format(date).replaceAll(".", "");
+        return `${day} ${month}`;
+      }
+
+      function formatWeekRangeRu(startKey) {
+        const endKey = addDaysKey(startKey, 6);
+        const startDate = keyToDate(startKey);
+        const endDate = keyToDate(endKey);
+        const startDay = fmtDay.format(startDate);
+        const endDay = fmtDay.format(endDate);
+        const startMonth = fmtMonthShort.format(startDate).replaceAll(".", "");
+        const endMonth = fmtMonthShort.format(endDate).replaceAll(".", "");
+        if (
+          startDate.getUTCFullYear() === endDate.getUTCFullYear() &&
+          startDate.getUTCMonth() === endDate.getUTCMonth()
+        ) {
+          return `${startDay}–${endDay} ${startMonth}`;
+        }
+        return `${startDay} ${startMonth}–${endDay} ${endMonth}`;
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function intensityLevel(value, thresholds) {
+        if (value <= 0) return 0;
+        if (value <= thresholds[0]) return 1;
+        if (value <= thresholds[1]) return 2;
+        if (value <= thresholds[2]) return 3;
+        return 4;
+      }
+
+      function quantile(sorted, q) {
+        const pos = (sorted.length - 1) * q;
+        const base = Math.floor(pos);
+        const rest = pos - base;
+        const next = sorted[base + 1] !== undefined ? sorted[base + 1] : sorted[base];
+        return sorted[base] + (next - sorted[base]) * rest;
+      }
+
+      function computeHeatmapThresholds(values) {
+        const nonZero = values.filter((value) => value > 0).sort((a, b) => a - b);
+        if (nonZero.length < 8) return [1, 5, 12];
+        const thresholds = [
+          quantile(nonZero, 0.45),
+          quantile(nonZero, 0.7),
+          quantile(nonZero, 0.9),
+        ].map((value) => Math.max(1, Math.round(value * 10) / 10));
+        for (let i = 1; i < thresholds.length; i += 1) {
+          if (thresholds[i] <= thresholds[i - 1]) thresholds[i] = thresholds[i - 1] + 1;
+        }
+        return thresholds;
+      }
+
+      function queryAll(db, sql, params = []) {
+        const statement = db.prepare(sql);
+        statement.bind(params);
+        const rows = [];
+        while (statement.step()) {
+          rows.push(statement.getAsObject());
+        }
+        statement.free();
+        return rows;
+      }
+
+      function queryOne(db, sql, params = []) {
+        const rows = queryAll(db, sql, params);
+        return rows.length ? rows[0] : null;
+      }
+
+      function tableColumns(db, tableName) {
+        try {
+          const rows = queryAll(db, `PRAGMA table_info(${tableName})`);
+          return rows.map((row) => row.name);
+        } catch (_error) {
+          return [];
+        }
+      }
+
+      function displayName(user) {
+        const first = (user.first_name || "").trim();
+        const last = (user.last_name || "").trim();
+        const full = [first, last].filter(Boolean).join(" ").trim();
+        if (full) return full;
+        const username = (user.username || "").trim();
+        if (username) return `@${username}`;
+        return `id ${user.tg_id}`;
+      }
+
+      function safeNumber(value) {
+        const num = Number(value);
+        return Number.isFinite(num) ? num : 0;
+      }
+
+      function normalizeBool(value, defaultValue = true) {
+        if (value === null || value === undefined || value === "") return defaultValue;
+        if (typeof value === "boolean") return value;
+        const num = Number(value);
+        if (!Number.isNaN(num)) return num !== 0;
+        const text = String(value).trim().toLowerCase();
+        if (["false", "0", "no", "off"].includes(text)) return false;
+        if (["true", "1", "yes", "on"].includes(text)) return true;
+        return defaultValue;
+      }
+
+      function parseCountXpMap(raw) {
+        if (!raw) return null;
+        try {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) return null;
+          const map = new Map();
+          for (const [key, value] of Object.entries(parsed)) {
+            const k = Number(key);
+            const v = Number(value);
+            if (Number.isFinite(k) && Number.isFinite(v)) {
+              map.set(k, v);
+            }
+          }
+          return map.size ? map : null;
+        } catch (_error) {
+          return null;
+        }
+      }
+
+      function xpForLog(tracker, log) {
+        const value = safeNumber(log.value);
+        if (value <= 0) return 0;
+        const type = tracker.type;
+        if (type === "binary") {
+          const base = Math.max(1, Math.trunc(safeNumber(tracker.xp || 10)));
+          const partial = normalizeBool(log.partial, false);
+          if (partial) return Math.max(1, Math.trunc(base / 2));
+          return base;
+        }
+        if (type === "time") {
+          const earned = Math.trunc(value * safeNumber(tracker.xp || 0));
+          return value > 0 ? Math.max(1, earned) : 0;
+        }
+        if (type === "count") {
+          const map = tracker._xpCountMap;
+          if (map) {
+            if (Number.isInteger(value)) return safeNumber(map.get(value) || 0);
+            return 0;
+          }
+          const fallback = clamp(Math.trunc(safeNumber(tracker.xp || 0)), 0, 10);
+          return fallback ? Math.max(1, fallback) : 0;
+        }
+        if (type === "scale") {
+          if (tracker.xp_scale_min !== null && tracker.xp_scale_min !== undefined && tracker.xp_scale_max !== null && tracker.xp_scale_max !== undefined) {
+            const v = clamp(value, 1, 10);
+            const min = safeNumber(tracker.xp_scale_min);
+            const max = safeNumber(tracker.xp_scale_max);
+            const earned = min + ((v - 1) * (max - min)) / 9;
+            return Math.round(earned);
+          }
+          const fallback = clamp(Math.trunc(safeNumber(tracker.xp || 0)), 0, 10);
+          return fallback ? Math.max(1, fallback) : 0;
+        }
+        const fallback = Math.trunc(safeNumber(tracker.xp || 0));
+        return fallback ? Math.max(1, fallback) : 0;
+      }
+
+      function weekdayMon0(date) {
+        return (date.getUTCDay() + 6) % 7;
+      }
+
+      function periodRange(period, dateKey) {
+        const date = keyToDate(dateKey);
+        if (period === "day") {
+          return [dateKey, dateKey];
+        }
+        if (period === "week") {
+          const start = new Date(date);
+          start.setUTCDate(start.getUTCDate() - weekdayMon0(start));
+          const end = new Date(start);
+          end.setUTCDate(end.getUTCDate() + 6);
+          return [dateToKey(start), dateToKey(end)];
+        }
+        if (period === "month") {
+          const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+          const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+          return [dateToKey(start), dateToKey(end)];
+        }
+        const start = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+        const end = new Date(Date.UTC(date.getUTCFullYear(), 11, 31));
+        return [dateToKey(start), dateToKey(end)];
+      }
+
+      function rangeAggregate(tracker, dailyStats, startKey, endKey) {
+        let sum = 0;
+        let count = 0;
+        let any = false;
+        for (let current = startKey; current <= endKey; current = addDaysKey(current, 1)) {
+          const stat = dailyStats.get(current);
+          if (!stat) continue;
+          any = true;
+          sum += stat.sum;
+          count += stat.count;
+        }
+        if (tracker.type === "scale") {
+          return count > 0 ? sum / count : 0;
+        }
+        return any ? sum : 0;
+      }
+
+      function trackerActivitySuccess(tracker, dailyStats, startKey, endKey) {
+        if (tracker.type === "binary") {
+          const partialOk = normalizeBool(tracker.streak_partial_ok, true);
+          for (let current = startKey; current <= endKey; current = addDaysKey(current, 1)) {
+            const stat = dailyStats.get(current);
+            if (!stat) continue;
+            if (partialOk && stat.count > 0) return true;
+            if (!partialOk && stat.countNonPartial > 0) return true;
+          }
+          return false;
+        }
+        const total = rangeAggregate(tracker, dailyStats, startKey, endKey);
+        const threshold = safeNumber(tracker.streak_min_value || 0);
+        if (threshold <= 0) return total > 0;
+        return total >= threshold;
+      }
+
+      function trackerGoalSuccess(tracker, dailyStats, goalsByTrackerId, startKey, endKey, period) {
+        const goals = goalsByTrackerId.get(tracker.id);
+        const target = goals ? safeNumber(goals.get(period) || 0) : 0;
+        if (!target || target <= 0) return false;
+        const total = rangeAggregate(tracker, dailyStats, startKey, endKey);
+        return total >= target;
+      }
+
+      function trackerStreakValue(tracker, dailyStats, goalsByTrackerId, todayKey) {
+        const enabled = normalizeBool(tracker.streak_enabled, true);
+        if (!enabled) return 0;
+        const mode = tracker.streak_mode || "activity";
+        let period = tracker.streak_period || (mode === "goal" ? "week" : "day");
+        if (mode === "goal" && !["week", "month", "year"].includes(period)) return 0;
+        if (mode !== "goal" && !["day", "week", "month"].includes(period)) period = "day";
+        let streak = 0;
+        let current = todayKey;
+        const [currentStart, currentEnd] = periodRange(period, todayKey);
+        const currentSuccess =
+          mode === "goal"
+            ? trackerGoalSuccess(tracker, dailyStats, goalsByTrackerId, currentStart, currentEnd, period)
+            : trackerActivitySuccess(tracker, dailyStats, currentStart, currentEnd);
+        if (!currentSuccess) current = addDaysKey(currentStart, -1);
+        for (let i = 0; i < 366; i += 1) {
+          const [startKey, endKey] = periodRange(period, current);
+          const success =
+            mode === "goal"
+              ? trackerGoalSuccess(tracker, dailyStats, goalsByTrackerId, startKey, endKey, period)
+              : trackerActivitySuccess(tracker, dailyStats, startKey, endKey);
+          if (!success) break;
+          streak += 1;
+          current = addDaysKey(startKey, -1);
+        }
+        return streak;
+      }
+
+      function activityStreakValue(tracker, dailyStats, todayKey) {
+        let period = tracker.streak_period || "day";
+        if (!["day", "week", "month"].includes(period)) period = "day";
+        let streak = 0;
+        let current = todayKey;
+        const [currentStart, currentEnd] = periodRange(period, todayKey);
+        const currentSuccess = trackerActivitySuccess(tracker, dailyStats, currentStart, currentEnd);
+        if (!currentSuccess) current = addDaysKey(currentStart, -1);
+        for (let i = 0; i < 366; i += 1) {
+          const [startKey, endKey] = periodRange(period, current);
+          const success = trackerActivitySuccess(tracker, dailyStats, startKey, endKey);
+          if (!success) break;
+          streak += 1;
+          current = addDaysKey(startKey, -1);
+        }
+        return streak;
+      }
+
+      function goalStreakValue(tracker, dailyStats, goalsByTrackerId, todayKey, period) {
+        if (!period) return 0;
+        let streak = 0;
+        let current = todayKey;
+        const [currentStart, currentEnd] = periodRange(period, todayKey);
+        const currentSuccess = trackerGoalSuccess(tracker, dailyStats, goalsByTrackerId, currentStart, currentEnd, period);
+        if (!currentSuccess) current = addDaysKey(currentStart, -1);
+        for (let i = 0; i < 120; i += 1) {
+          const [startKey, endKey] = periodRange(period, current);
+          const success = trackerGoalSuccess(tracker, dailyStats, goalsByTrackerId, startKey, endKey, period);
+          if (!success) break;
+          streak += 1;
+          current = addDaysKey(startKey, -1);
+        }
+        return streak;
+      }
+
+      function pickGoalPeriod(goals) {
+        if (!goals) return null;
+        if (safeNumber(goals.get("month") || 0) > 0) return "month";
+        if (safeNumber(goals.get("week") || 0) > 0) return "week";
+        if (safeNumber(goals.get("year") || 0) > 0) return "year";
+        return null;
+      }
+
+      function buildDailyStats(logs) {
+        const stats = new Map();
+        for (const log of logs) {
+          const date = String(log.date || "");
+          if (!date) continue;
+          const entry = stats.get(date) || { sum: 0, count: 0, countNonPartial: 0 };
+          entry.sum += safeNumber(log.value);
+          entry.count += 1;
+          if (!normalizeBool(log.partial, false)) entry.countNonPartial += 1;
+          stats.set(date, entry);
+        }
+        return stats;
+      }
+
+      function buildRangeKeys(endKey, rangeDays) {
+        const keys = [];
+        const startKey = addDaysKey(endKey, -(rangeDays - 1));
+        for (let current = startKey; current <= endKey; current = addDaysKey(current, 1)) {
+          keys.push(current);
+        }
+        return keys;
+      }
+
+      function daysInYear(year) {
+        const start = new Date(Date.UTC(year, 0, 1));
+        const end = new Date(Date.UTC(year, 11, 31));
+        return Math.round((end - start) / 86_400_000) + 1;
+      }
+
+      const fmtMonthLong = new Intl.DateTimeFormat("ru-RU", { month: "long" });
+
+      function formatMonthRu(year, monthIndex) {
+        const date = new Date(Date.UTC(year, monthIndex, 1));
+        const month = fmtMonthLong.format(date);
+        return `${month.charAt(0).toUpperCase()}${month.slice(1)} ${year}`;
+      }
+
+      function monthContextForTz(tz, offset) {
+        const todayKey = todayKeyForTz(tz);
+        const today = keyToDate(todayKey);
+        const base = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + offset, 1));
+        const year = base.getUTCFullYear();
+        const monthIndex = base.getUTCMonth();
+        const start = new Date(Date.UTC(year, monthIndex, 1));
+        const end = new Date(Date.UTC(year, monthIndex + 1, 0));
+        return {
+          year,
+          monthIndex,
+          startKey: dateToKey(start),
+          endKey: dateToKey(end),
+          daysInMonth: end.getUTCDate(),
+        };
+      }
+
+      function formatGoalNumber(value) {
+        const num = safeNumber(value);
+        if (!num) return "0";
+        const rounded = Math.round(num * 10) / 10;
+        return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+      }
+
+      function resolveGoalInfo(tracker, goals) {
+        const source = goals || new Map();
+        const month = safeNumber(source.get("month") || 0);
+        if (month > 0) return { period: "month", target: month };
+        const week = safeNumber(source.get("week") || 0);
+        if (week > 0) return { period: "week", target: week };
+        const year = safeNumber(source.get("year") || 0);
+        if (year > 0) return { period: "year", target: year };
+        const day = safeNumber(source.get("day") || 0);
+        if (day > 0) return { period: "day", target: day };
+        const fallback = safeNumber(tracker.target || 0);
+        if (fallback > 0) return { period: "day", target: fallback, fallback: true };
+        return null;
+      }
+
+      function dailyActualValue(tracker, stat) {
+        if (!stat) return 0;
+        if (tracker.type === "binary") {
+          if (stat.countNonPartial > 0) return 1;
+          return stat.count > 0 ? 0.5 : 0;
+        }
+        if (tracker.type === "scale") {
+          return stat.count > 0 ? stat.sum / stat.count : 0;
+        }
+        return safeNumber(stat.sum);
+      }
+
+      function dailyTargetValue(tracker, goalInfo, monthCtx) {
+        if (!goalInfo) return 0;
+        const target = safeNumber(goalInfo.target || 0);
+        if (target <= 0) return 0;
+        if (tracker.type === "scale") return target;
+        if (goalInfo.period === "month") return target / monthCtx.daysInMonth;
+        if (goalInfo.period === "week") return target / 7;
+        if (goalInfo.period === "year") return target / daysInYear(monthCtx.year);
+        return target;
+      }
+
+      function monthlyTargetValue(tracker, goalInfo, monthCtx) {
+        if (!goalInfo) return 0;
+        const target = safeNumber(goalInfo.target || 0);
+        if (target <= 0) return 0;
+        if (tracker.type === "scale") return target;
+        if (goalInfo.period === "month") return target;
+        if (goalInfo.period === "week") return (target * monthCtx.daysInMonth) / 7;
+        if (goalInfo.period === "year") return (target * monthCtx.daysInMonth) / daysInYear(monthCtx.year);
+        if (goalInfo.period === "day") return target * monthCtx.daysInMonth;
+        return target;
+      }
+
+      function render() {
+        if (!state.db || !state.selectedUserId) return;
+        const db = state.db;
+        const rangeDays = state.rangeDays;
+
+        const userCols = tableColumns(db, "users");
+        const selectUserCols = ["id", "tg_id", "tz", "level", "xp", "streak", "first_name", "last_name", "username", "google_sheet_url"].filter((c) =>
+          userCols.includes(c)
+        );
+        const user = queryOne(db, `SELECT ${selectUserCols.join(", ")} FROM users WHERE id = ?`, [
+          state.selectedUserId,
+        ]);
+        if (!user) {
+          ui.status.classList.add("error");
+          ui.status.textContent = "Пользователь не найден в базе.";
+          return;
+        }
+
+        const tz = user.tz || "UTC";
+        const todayKey = todayKeyForTz(tz);
+        const rangeKeys = buildRangeKeys(todayKey, rangeDays);
+        const rangeStartKey = rangeKeys[0];
+
+        const trackers = queryAll(
+          db,
+          `SELECT * FROM trackers WHERE user_id = ? AND (active IS NULL OR active != 0) ORDER BY order_index, id`,
+          [user.id]
+        ).map((tracker) => {
+          return {
+            ...tracker,
+            _xpCountMap: parseCountXpMap(tracker.xp_count_map),
+          };
+        });
+        const trackerById = new Map(trackers.map((t) => [t.id, t]));
+        const trackerIds = trackers.map((t) => t.id);
+
+        const goalsByTrackerId = new Map();
+        if (trackerIds.length) {
+          const goalsRows = queryAll(
+            db,
+            `SELECT g.tracker_id, g.period, g.target
+             FROM tracker_goals g
+             JOIN trackers t ON t.id = g.tracker_id
+             WHERE t.user_id = ?`,
+            [user.id]
+          );
+          for (const row of goalsRows) {
+            const trackerId = safeNumber(row.tracker_id);
+            if (!goalsByTrackerId.has(trackerId)) goalsByTrackerId.set(trackerId, new Map());
+            goalsByTrackerId.get(trackerId).set(row.period, safeNumber(row.target));
+          }
+        }
+
+        const logs = trackerIds.length
+          ? queryAll(
+              db,
+              `SELECT tracker_id, date, value, partial FROM tracker_logs WHERE tracker_id IN (${trackerIds
+                .map(() => "?")
+                .join(",")})`,
+              trackerIds
+            )
+          : [];
+        const logsByTrackerId = new Map();
+        for (const log of logs) {
+          const trackerId = safeNumber(log.tracker_id);
+          if (!logsByTrackerId.has(trackerId)) logsByTrackerId.set(trackerId, []);
+          logsByTrackerId.get(trackerId).push(log);
+        }
+
+        const missions = queryAll(
+          db,
+          `SELECT date, status, text FROM missions WHERE user_id = ? AND date >= ?`,
+          [user.id, addDaysKey(todayKey, -370)]
+        );
+        const missionByDate = new Map(missions.map((m) => [String(m.date), m]));
+
+        const journalEntries = queryAll(
+          db,
+          `SELECT date, text FROM journal_entries WHERE user_id = ? AND date >= ?`,
+          [user.id, addDaysKey(todayKey, -370)]
+        );
+        const journalByDate = new Map(
+          journalEntries
+            .map((e) => [String(e.date), String(e.text || "")])
+            .filter(([, text]) => text.trim().length > 0)
+        );
+
+        const lastReport = queryOne(
+          db,
+          `SELECT week_start, week_end, analysis_text FROM journal_weekly_reports WHERE user_id = ? ORDER BY week_start DESC LIMIT 1`,
+          [user.id]
+        );
+
+        const xpByDate = new Map();
+        const activityByDate = new Map();
+        const xpByTracker = new Map();
+        for (const log of logs) {
+          const tracker = trackerById.get(safeNumber(log.tracker_id));
+          if (!tracker) continue;
+          const date = String(log.date || "");
+          if (!date) continue;
+          const earned = xpForLog(tracker, log);
+          xpByDate.set(date, safeNumber(xpByDate.get(date) || 0) + earned);
+          xpByTracker.set(tracker.id, safeNumber(xpByTracker.get(tracker.id) || 0) + earned);
+          activityByDate.set(date, safeNumber(activityByDate.get(date) || 0) + 1);
+        }
+        for (const m of missions) {
+          const date = String(m.date || "");
+          if (!date) continue;
+          const status = String(m.status || "");
+          const earned = status === "done" ? 10 : status === "partial" ? 5 : 0;
+          if (earned) {
+            xpByDate.set(date, safeNumber(xpByDate.get(date) || 0) + earned);
+          }
+          if (status && status !== "not_set") {
+            activityByDate.set(date, safeNumber(activityByDate.get(date) || 0) + 1);
+          }
+        }
+        for (const [date, text] of journalByDate.entries()) {
+          if (text.trim()) activityByDate.set(date, safeNumber(activityByDate.get(date) || 0) + 1);
+        }
+
+        let xpInRange = 0;
+        let bestDayXp = 0;
+        let bestDayKey = null;
+        let activeDaysInRange = 0;
+        for (const key of rangeKeys) {
+          const dayXp = safeNumber(xpByDate.get(key) || 0);
+          xpInRange += dayXp;
+          if (dayXp > bestDayXp) {
+            bestDayXp = dayXp;
+            bestDayKey = key;
+          }
+          if (safeNumber(activityByDate.get(key) || 0) > 0) activeDaysInRange += 1;
+        }
+        const weekXp = new Map();
+        for (const key of rangeKeys) {
+          const date = keyToDate(key);
+          const start = new Date(date);
+          start.setUTCDate(start.getUTCDate() - weekdayMon0(start));
+          const weekStart = dateToKey(start);
+          weekXp.set(weekStart, safeNumber(weekXp.get(weekStart) || 0) + safeNumber(xpByDate.get(key) || 0));
+        }
+        let bestWeekStartKey = null;
+        let bestWeekXp = 0;
+        for (const [startKey, total] of weekXp.entries()) {
+          const value = safeNumber(total || 0);
+          if (value > bestWeekXp || (value === bestWeekXp && (!bestWeekStartKey || startKey > bestWeekStartKey))) {
+            bestWeekXp = value;
+            bestWeekStartKey = startKey;
+          }
+        }
+
+        const dailyStatsByTracker = new Map();
+        const activityStreakByTracker = new Map();
+        const goalStreakByTracker = new Map();
+        const goalPeriodByTracker = new Map();
+        const goalProgressByTracker = new Map();
+        for (const tracker of trackers) {
+          const stats = buildDailyStats(logsByTrackerId.get(tracker.id) || []);
+          dailyStatsByTracker.set(tracker.id, stats);
+          activityStreakByTracker.set(tracker.id, activityStreakValue(tracker, stats, todayKey));
+          const goals = goalsByTrackerId.get(tracker.id);
+          const goalPeriod = pickGoalPeriod(goals);
+          goalPeriodByTracker.set(tracker.id, goalPeriod);
+          const goalStreak = goalPeriod
+            ? goalStreakValue(tracker, stats, goalsByTrackerId, todayKey, goalPeriod)
+            : 0;
+          goalStreakByTracker.set(tracker.id, goalStreak);
+          if (goalPeriod && goals) {
+            const [startKey, endKey] = periodRange(goalPeriod, todayKey);
+            const progress = rangeAggregate(tracker, stats, startKey, endKey);
+            const target = safeNumber(goals.get(goalPeriod) || 0);
+            goalProgressByTracker.set(tracker.id, {
+              progress,
+              target,
+              period: goalPeriod,
+            });
+          } else {
+            goalProgressByTracker.set(tracker.id, { progress: 0, target: 0, period: null });
+          }
+        }
+
+        const bestStreak = trackers
+          .map((t) => ({ tracker: t, streak: safeNumber(activityStreakByTracker.get(t.id) || 0) }))
+          .sort((a, b) => b.streak - a.streak)[0];
+
+        const bestHabitByXp = trackers
+          .map((t) => ({ tracker: t, xp: safeNumber(xpByTracker.get(t.id) || 0) }))
+          .sort((a, b) => b.xp - a.xp)[0];
+
+        // Player card (optional)
+        setLoading(false);
+        ui.status.textContent = "";
+        if (ui.playerName) {
+          ui.playerTz.textContent = tz;
+          ui.playerName.textContent = displayName(user);
+          ui.playerMeta.textContent = [
+            user.google_sheet_url ? "📊 Google Sheets подключен" : "📊 Google Sheets не подключен",
+            `id ${user.tg_id}`,
+          ].join(" · ");
+
+          const level = safeNumber(user.level || 1);
+          const xp = safeNumber(user.xp || 0);
+          const need = xpNeeded(level);
+          ui.kpiLevel.textContent = String(level);
+          ui.kpiXp.textContent = `${xp}/${need} XP до уровня ${level + 1}`;
+          ui.xpBar.style.width = `${clamp((xp / need) * 100, 0, 100)}%`;
+
+          ui.kpiStreak.textContent = String(safeNumber(user.streak || 0));
+          ui.kpiActiveDays.textContent = `${activeDaysInRange}/${rangeDays} активных дней`;
+          ui.kpiXpRange.textContent = `${xpInRange} XP`;
+          const xpMeta = [];
+          if (bestWeekStartKey) xpMeta.push(`Топ неделя: ${formatWeekRangeRu(bestWeekStartKey)} (+${bestWeekXp})`);
+          if (bestDayKey) xpMeta.push(`лучший день: ${formatDayMonthRu(bestDayKey)} (+${bestDayXp})`);
+          ui.kpiXpBestDay.textContent = xpMeta.length ? xpMeta.join(" · ") : "—";
+          ui.kpiHabits.textContent = String(trackers.length);
+          ui.kpiBestHabit.textContent =
+            bestStreak && bestStreak.tracker ? `Топ стрик: ${bestStreak.tracker.name} (${bestStreak.streak})` : "—";
+        }
+
+        // Today
+        ui.todayDate.textContent = formatDateRu(todayKey);
+        ui.todayList.innerHTML = "";
+        const todayMission = missionByDate.get(todayKey);
+        const missionStatus = todayMission ? String(todayMission.status || "not_set") : "not_set";
+        const missionText = todayMission && String(todayMission.text || "").trim() ? String(todayMission.text).trim() : "Миссия не задана";
+        ui.todayList.appendChild(renderMissionCard(missionText, missionStatus));
+
+        // Journal
+        const journalDays = rangeKeys.filter((k) => journalByDate.has(k)).length;
+        ui.journalStat.textContent = `${journalDays}/${rangeDays} дней`;
+        const lastEntryKey = [...journalByDate.keys()].sort().pop();
+        const lastEntryText = lastEntryKey ? journalByDate.get(lastEntryKey) : "";
+        const reportPreview = lastReport && lastReport.analysis_text ? String(lastReport.analysis_text).trim() : "";
+        const lines = [];
+        if (lastEntryKey && lastEntryText) {
+          lines.push(`<b>Последняя заметка</b> · ${formatDateRu(lastEntryKey)}`);
+          lines.push(escapeHtml(shorten(lastEntryText, 260)));
+        } else {
+          lines.push("Нет заметок.");
+        }
+        if (reportPreview) {
+          lines.push("");
+          lines.push(`<b>Недельный отчёт</b>`);
+          lines.push(escapeHtml(shorten(reportPreview, 320)));
+        }
+        ui.journalBody.innerHTML = lines.join("<br>");
+
+        // Heatmap (year view)
+        const yearRange = yearRangeForKey(todayKey);
+        renderHeatmap(ui.heatmap, activityByDate, xpByDate, yearRange.startKey, yearRange.endKey, todayKey);
+        const heatmapDaysActive = countActiveDays(activityByDate, yearRange.startKey, yearRange.endKey);
+        ui.heatmapStat.textContent = `${heatmapDaysActive} активных дней / ${yearRange.totalDays}`;
+        if (ui.heatmapSub) {
+          ui.heatmapSub.textContent = `${yearRange.year} · каждый квадрат — день · XP + события`;
+        }
+
+        // Goals
+        const goalRows = [];
+        let totalGoals = 0;
+        for (const tracker of trackers) {
+          const goals = goalsByTrackerId.get(tracker.id);
+          if (!goals) continue;
+          const stats = dailyStatsByTracker.get(tracker.id);
+          const perPeriod = {};
+          let hasAny = false;
+          for (const period of ["year", "month", "week"]) {
+            const target = safeNumber(goals.get(period) || 0);
+            if (!target) continue;
+            hasAny = true;
+            totalGoals += 1;
+            const [startKey, endKey] = periodRange(period, todayKey);
+            const progress = stats ? rangeAggregate(tracker, stats, startKey, endKey) : 0;
+            const percent = target > 0 ? clamp((progress / target) * 100, 0, 140) : 0;
+            const streak = stats ? goalStreakValue(tracker, stats, goalsByTrackerId, todayKey, period) : 0;
+            perPeriod[period] = { progress, target, percent, streak };
+          }
+          if (hasAny) goalRows.push({ tracker, perPeriod });
+        }
+        ui.goalsStatTotal.textContent = totalGoals ? `${totalGoals} целей` : "целей нет";
+        ui.goalsTable.innerHTML = "";
+        ui.goalsCompact.innerHTML = "";
+        if (!goalRows.length) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = "Добавь цели в трекерах, чтобы увидеть прогресс.";
+          ui.goalsTable.appendChild(empty);
+          ui.goalsCompact.appendChild(empty.cloneNode(true));
+        } else {
+          for (const row of goalRows) {
+            const rowEl = document.createElement("div");
+            rowEl.className = "goal-table-row";
+            const name = document.createElement("div");
+            name.className = "goal-name";
+            name.textContent = row.tracker.name;
+            rowEl.appendChild(name);
+            for (const period of ["year", "month", "week"]) {
+              rowEl.appendChild(goalCell(row.tracker, row.perPeriod[period], period));
+            }
+            ui.goalsTable.appendChild(rowEl);
+          }
+          for (const row of goalRows) {
+            const periodOrder = ["month", "week", "year"];
+            let primaryPeriod = goalPeriodByTracker.get(row.tracker.id);
+            if (!primaryPeriod || !row.perPeriod[primaryPeriod]) {
+              primaryPeriod = periodOrder.find((period) => row.perPeriod[period]);
+            }
+            if (!primaryPeriod) continue;
+            ui.goalsCompact.appendChild(goalCompactCard(row.tracker, row.perPeriod[primaryPeriod], primaryPeriod));
+          }
+        }
+
+        // Trends chart
+        const labels = rangeKeys.map((k) => k.slice(5).replace("-", "."));
+        const values = rangeKeys.map((k) => safeNumber(xpByDate.get(k) || 0));
+        ui.trendStat.textContent = `${xpInRange} XP за ${rangeDays} дней`;
+        renderChart(labels, values);
+
+        // Habits cards (optional)
+        if (ui.habitsGrid) {
+          ui.habitsGrid.innerHTML = "";
+          if (ui.habitsStat) ui.habitsStat.textContent = `${trackers.length} активных`;
+          for (const tracker of trackers) {
+            ui.habitsGrid.appendChild(
+              habitCard(
+                tracker,
+                dailyStatsByTracker.get(tracker.id),
+                goalsByTrackerId.get(tracker.id),
+                todayKey,
+                activityStreakByTracker.get(tracker.id),
+                goalStreakByTracker.get(tracker.id),
+                goalPeriodByTracker.get(tracker.id),
+                goalProgressByTracker.get(tracker.id),
+                xpByTracker.get(tracker.id)
+              )
+            );
+          }
+        }
+
+        state.monthlyData = {
+          user,
+          tz,
+          todayKey,
+          trackers,
+          goalsByTrackerId,
+          dailyStatsByTracker,
+        };
+        renderMonthlyView();
+      }
+
+      function renderMonthlyView() {
+        if (!state.monthlyData || !ui.monthlyView) return;
+        const { tz, todayKey, trackers, goalsByTrackerId, dailyStatsByTracker } = state.monthlyData;
+        const monthCtx = monthContextForTz(tz, safeNumber(state.monthOffset || 0));
+        const daysInMonth = monthCtx.daysInMonth;
+        ui.monthLabel.textContent = formatMonthRu(monthCtx.year, monthCtx.monthIndex);
+
+        const goalInfoByTracker = new Map();
+        const dailyTargetByTracker = new Map();
+        let trackersWithGoal = 0;
+        for (const tracker of trackers) {
+          const goalInfo = resolveGoalInfo(tracker, goalsByTrackerId.get(tracker.id));
+          if (goalInfo && safeNumber(goalInfo.target || 0) > 0) trackersWithGoal += 1;
+          goalInfoByTracker.set(tracker.id, goalInfo);
+          dailyTargetByTracker.set(tracker.id, dailyTargetValue(tracker, goalInfo, monthCtx));
+        }
+
+        const progressSeries = [];
+        const activityCounts = [];
+        const missingCounts = [];
+        const doneCounts = [];
+        const partialCounts = [];
+        let progressSum = 0;
+        let progressDays = 0;
+        let totalCompletions = 0;
+        let activeDays = 0;
+        let bestDayIndex = -1;
+        let bestDayValue = -1;
+
+        for (let day = 1; day <= daysInMonth; day += 1) {
+          const date = new Date(Date.UTC(monthCtx.year, monthCtx.monthIndex, day));
+          const dayKey = dateToKey(date);
+          let expected = 0;
+          let done = 0;
+          let doneCount = 0;
+          let partialCount = 0;
+          let anyActivity = false;
+          let activityCount = 0;
+          for (const tracker of trackers) {
+            const dailyTarget = safeNumber(dailyTargetByTracker.get(tracker.id) || 0);
+            const stats = dailyStatsByTracker.get(tracker.id);
+            const stat = stats ? stats.get(dayKey) : null;
+            const actual = dailyActualValue(tracker, stat);
+            if (actual > 0) {
+              anyActivity = true;
+              activityCount += 1;
+            }
+            if (dailyTarget <= 0) continue;
+            expected += dailyTarget;
+            done += Math.min(actual, dailyTarget);
+            if (actual >= dailyTarget && actual > 0) {
+              doneCount += 1;
+            } else if (actual > 0) {
+              partialCount += 1;
+            }
+          }
+          const percent = expected > 0 ? Math.round((done / expected) * 100) : 0;
+          progressSeries.push(percent);
+          if (expected > 0) {
+            progressSum += percent;
+            progressDays += 1;
+          }
+          totalCompletions += activityCount;
+          const hadActivity = doneCount > 0 || partialCount > 0 || anyActivity;
+          if (hadActivity) activeDays += 1;
+          if ((expected > 0 || hadActivity) && percent > bestDayValue) {
+            bestDayValue = percent;
+            bestDayIndex = day;
+          }
+          activityCounts.push(activityCount);
+          missingCounts.push(Math.max(trackers.length - activityCount, 0));
+          doneCounts.push(doneCount);
+          partialCounts.push(partialCount);
+        }
+
+        const avgProgress = progressDays ? Math.round(progressSum / progressDays) : 0;
+        const avgProgressLabel = progressDays ? `${avgProgress}%` : "—";
+        ui.monthHabits.textContent = String(trackers.length);
+        ui.monthGoalsStat.textContent = trackersWithGoal ? `${trackersWithGoal} с целями` : "без целей";
+        ui.monthCompletions.textContent = String(totalCompletions);
+        ui.monthActiveDays.textContent = `${activeDays}/${daysInMonth} активных дней`;
+        ui.monthAvgProgress.textContent = avgProgressLabel;
+        if (ui.monthAvgProgressBar) {
+          ui.monthAvgProgressBar.style.width = `${clamp(avgProgress, 0, 100)}%`;
+        }
+        if (bestDayIndex > 0) {
+          const bestKey = dateToKey(new Date(Date.UTC(monthCtx.year, monthCtx.monthIndex, bestDayIndex)));
+          ui.monthBestDay.textContent = `Лучший: ${formatDayMonthRu(bestKey)} · ${bestDayValue}%`;
+        } else {
+          ui.monthBestDay.textContent = "Лучший: —";
+        }
+        ui.monthProgressStat.textContent = avgProgressLabel;
+        const weekCount = Math.ceil(daysInMonth / 7);
+        ui.monthlyTableStat.textContent = `${daysInMonth} дней · ${weekCount} недели`;
+        ui.monthlyChartStat.textContent = progressDays ? `${avgProgress}% средний` : "нет целей";
+        if (ui.monthNextBtn) ui.monthNextBtn.disabled = safeNumber(state.monthOffset || 0) >= 0;
+
+        ui.monthlyTable.innerHTML = "";
+        const totalColumns = weekCount * 7;
+        const isNarrow = window.matchMedia ? window.matchMedia("(max-width: 720px)").matches : window.innerWidth <= 720;
+        const gap = isNarrow ? 1 : 2;
+        const minDay = isNarrow ? 6 : 8;
+        const maxDay = isNarrow ? 10 : 12;
+        const minName = isNarrow ? 92 : 140;
+        const maxName = isNarrow ? 140 : 200;
+
+        const layout = ui.monthlyTable;
+        const gridWrap = document.createElement("div");
+        gridWrap.className = "monthly-grid-wrap";
+        const grid = document.createElement("div");
+        grid.className = "monthly-grid";
+        gridWrap.appendChild(grid);
+        const analysis = document.createElement("div");
+        analysis.className = "monthly-analysis";
+        layout.appendChild(gridWrap);
+        layout.appendChild(analysis);
+
+        const fallbackWidth = Math.max(window.innerWidth - 40, 280);
+        const gridWidth = gridWrap.getBoundingClientRect().width || fallbackWidth;
+        let nameWidth = Math.round(clamp(gridWidth * 0.28, minName, maxName));
+        let available = gridWidth - nameWidth - gap * totalColumns;
+        let daySize = Math.floor(available / totalColumns);
+
+        if (!Number.isFinite(daySize) || daySize <= 0) daySize = minDay;
+        if (daySize < minDay) {
+          daySize = minDay;
+          const leftover = gridWidth - gap * totalColumns - daySize * totalColumns;
+          nameWidth = Math.round(clamp(leftover, minName, maxName));
+          available = gridWidth - nameWidth - gap * totalColumns;
+          daySize = Math.max(4, Math.floor(available / totalColumns));
+        }
+        daySize = clamp(daySize, minDay, maxDay);
+
+        grid.style.setProperty("--month-day", `${daySize}px`);
+        grid.style.setProperty("--month-gap", `${gap}px`);
+        const gridTemplate = `${nameWidth}px repeat(${totalColumns}, ${daySize}px)`;
+        const compactMode = daySize <= 8;
+        const ultraCompact = daySize <= 6;
+
+        grid.classList.toggle("compact", compactMode);
+        grid.classList.toggle("ultra", ultraCompact);
+
+        const weekRow = document.createElement("div");
+        weekRow.className = "monthly-grid-row week-header";
+        weekRow.style.gridTemplateColumns = gridTemplate;
+        const weekHead = document.createElement("div");
+        weekHead.className = "monthly-head";
+        weekHead.textContent = "Посаженные привычки";
+        weekRow.appendChild(weekHead);
+        for (let week = 0; week < weekCount; week += 1) {
+          const weekCell = document.createElement("div");
+          weekCell.className = `week-label week-${week + 1}`;
+          weekCell.style.gridColumn = "span 7";
+          weekCell.textContent = `Неделя ${week + 1}`;
+          weekRow.appendChild(weekCell);
+        }
+        grid.appendChild(weekRow);
+
+
+        for (const tracker of trackers) {
+          const row = document.createElement("div");
+          row.className = "monthly-grid-row habit-row";
+          row.style.gridTemplateColumns = gridTemplate;
+
+          const nameCell = document.createElement("div");
+          nameCell.className = "habit-cell";
+          const name = document.createElement("div");
+          name.className = "name";
+          name.textContent = tracker.name;
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          const goalInfo = goalInfoByTracker.get(tracker.id);
+          const unit = tracker.unit ? String(tracker.unit) : "";
+          if (goalInfo && safeNumber(goalInfo.target || 0) > 0) {
+            const period = periodLabel(goalInfo.period);
+            meta.textContent = `${trackerTypeLabel(tracker)} · ${formatGoalNumber(goalInfo.target)}${unit}${period ? `/${period}` : ""}`;
+          } else {
+            meta.textContent = `${trackerTypeLabel(tracker)} · без цели`;
+          }
+          nameCell.appendChild(name);
+          nameCell.appendChild(meta);
+          row.appendChild(nameCell);
+
+          const stats = dailyStatsByTracker.get(tracker.id);
+          const dailyTarget = safeNumber(dailyTargetByTracker.get(tracker.id) || 0);
+
+          for (let col = 0; col < totalColumns; col += 1) {
+            const cell = document.createElement("div");
+            cell.className = `day-cell week-${Math.floor(col / 7) + 1}`;
+            const day = col + 1;
+            if (day > daysInMonth) {
+              cell.classList.add("empty");
+              row.appendChild(cell);
+              continue;
+            }
+            const date = new Date(Date.UTC(monthCtx.year, monthCtx.monthIndex, day));
+            const dayKey = dateToKey(date);
+            const stat = stats ? stats.get(dayKey) : null;
+            const actual = dailyActualValue(tracker, stat);
+            if (actual > 0) {
+              if (dailyTarget > 0 && actual < dailyTarget) cell.classList.add("partial");
+              else cell.classList.add("done");
+            }
+            if (safeNumber(state.monthOffset || 0) === 0 && dayKey > todayKey && actual <= 0) {
+              cell.classList.add("empty");
+            }
+            if (dailyTarget > 0) {
+              const ratioPercent = Math.round(clamp((actual / dailyTarget) * 100, 0, 140));
+              cell.title = `${tracker.name} · ${dayKey}: ${formatGoalNumber(actual)}${unit} / ${formatGoalNumber(
+                dailyTarget
+              )}${unit} (${ratioPercent}%)`;
+            } else if (actual > 0) {
+              cell.title = `${tracker.name} · ${dayKey}: ${formatGoalNumber(actual)}${unit}`;
+            } else {
+              cell.title = `${tracker.name} · ${dayKey}`;
+            }
+            row.appendChild(cell);
+          }
+          grid.appendChild(row);
+        }
+
+        // Footer rows removed per UI request.
+
+        const analysisHead = document.createElement("div");
+        analysisHead.className = "analysis-head";
+        analysisHead.innerHTML = "<span>Анализ</span><span>Прогресс</span>";
+        analysis.appendChild(analysisHead);
+
+        const analysisList = document.createElement("div");
+        analysisList.className = "analysis-list";
+        const analysisRows = trackers.map((tracker) => {
+          const stats = dailyStatsByTracker.get(tracker.id);
+          const goalInfo = goalInfoByTracker.get(tracker.id);
+          const actual = stats ? rangeAggregate(tracker, stats, monthCtx.startKey, monthCtx.endKey) : 0;
+          const target = monthlyTargetValue(tracker, goalInfo, monthCtx);
+          const percent = target > 0 ? Math.round((actual / target) * 100) : 0;
+          return { tracker, actual, target, percent };
+        });
+        analysisRows.sort((a, b) => b.percent - a.percent);
+
+        for (const rowData of analysisRows) {
+          const row = document.createElement("div");
+          row.className = "analysis-row";
+          const name = document.createElement("div");
+          name.className = "analysis-name";
+          name.textContent = shorten(rowData.tracker.name, 20);
+          const unit = rowData.tracker.unit ? String(rowData.tracker.unit) : "";
+          const value = document.createElement("div");
+          value.className = "analysis-value";
+          if (rowData.target > 0) {
+            value.textContent = `${formatGoalNumber(rowData.actual)}${unit} / ${formatGoalNumber(rowData.target)}${unit}`;
+          } else {
+            value.textContent = `${formatGoalNumber(rowData.actual)}${unit}`;
+          }
+          const bar = document.createElement("div");
+          bar.className = "analysis-bar";
+          const barFill = document.createElement("span");
+          barFill.style.width = `${clamp(rowData.percent, 0, 100)}%`;
+          bar.appendChild(barFill);
+
+          const metric = document.createElement("div");
+          metric.className = "analysis-metric";
+          metric.appendChild(value);
+          metric.appendChild(bar);
+
+          row.title = rowData.target > 0 ? `${rowData.tracker.name}: ${rowData.percent}%` : `${rowData.tracker.name}: без цели`;
+          row.appendChild(name);
+          row.appendChild(metric);
+          analysisList.appendChild(row);
+        }
+        analysis.appendChild(analysisList);
+
+        const labels = Array.from({ length: daysInMonth }, (_v, idx) => String(idx + 1));
+        renderMonthlyChart(labels, progressSeries);
+      }
+
+      function shorten(text, maxLen) {
+        const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+        if (cleaned.length <= maxLen) return cleaned;
+        return cleaned.slice(0, maxLen - 1).trim() + "…";
+      }
+
+      function escapeHtml(text) {
+        return String(text)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function makeRow(title, subtitle, right) {
+        const row = document.createElement("div");
+        row.className = "row";
+        const left = document.createElement("div");
+        left.className = "left";
+        const primary = document.createElement("div");
+        primary.className = "primary";
+        primary.textContent = title;
+        const secondary = document.createElement("div");
+        secondary.className = "secondary";
+        secondary.textContent = subtitle;
+        left.appendChild(primary);
+        left.appendChild(secondary);
+        const r = document.createElement("div");
+        r.className = "right";
+        r.textContent = right;
+        row.appendChild(left);
+        row.appendChild(r);
+        return row;
+      }
+
+      function missionStatusMeta(status) {
+        const map = {
+          done: ["✅ сделано", "good"],
+          partial: ["↩️ частично", "warn"],
+          fail: ["❌ не сделано", "bad"],
+          set: ["в процессе", ""],
+          not_set: ["не задана", ""],
+        };
+        const item = map[status] || [status, ""];
+        return { label: item[0], tone: item[1] };
+      }
+
+      function renderMissionCard(text, status) {
+        const meta = missionStatusMeta(status);
+        const card = document.createElement("div");
+        card.className = "mission-card";
+        const head = document.createElement("div");
+        head.className = "mission-head";
+        const label = document.createElement("div");
+        label.className = "mission-label";
+        label.textContent = "Фокус дня";
+        const badge = document.createElement("div");
+        badge.className = `pill ${meta.tone}`.trim();
+        badge.textContent = meta.label;
+        head.appendChild(label);
+        head.appendChild(badge);
+        const body = document.createElement("div");
+        body.className = "mission-text";
+        body.textContent = text;
+        card.appendChild(head);
+        card.appendChild(body);
+        return card;
+      }
+
+      function streakLabel(value) {
+        const v = safeNumber(value || 0);
+        return v > 0 ? `❤️‍🔥 стрик ${v}` : "без серии";
+      }
+
+      function periodLabel(period) {
+        const map = { day: "дн", week: "нед", month: "мес", year: "год" };
+        return map[period] || period || "";
+      }
+
+      function trackerTypeLabel(tracker) {
+        const map = {
+          binary: "бинарный",
+          time: "время",
+          count: "количество",
+          scale: "шкала 1–10",
+        };
+        return map[tracker.type] || String(tracker.type || "");
+      }
+
+      function habitCard(tracker, dailyStats, goals, todayKey, streak, goalStreak, goalPeriod, goalProgress, xpTotal) {
+        const card = document.createElement("div");
+        card.className = "habit";
+
+        const header = document.createElement("div");
+        header.className = "habit-header";
+
+        const title = document.createElement("div");
+        title.className = "habit-title";
+        const name = document.createElement("div");
+        name.className = "habit-name";
+        name.textContent = tracker.name;
+        const meta = document.createElement("div");
+        meta.className = "habit-meta";
+        const unit = tracker.unit ? String(tracker.unit) : "";
+        const goalPeriodPref = pickGoalPeriod(goals);
+        const goalTarget = goalPeriodPref ? safeNumber(goals.get(goalPeriodPref) || 0) : 0;
+        const periodLabelShort = goalPeriodPref ? periodLabel(goalPeriodPref) : "";
+        const goalText =
+          goalTarget > 0
+            ? `цель ${goalTarget}${unit}${periodLabelShort ? `/${periodLabelShort}` : ""}`
+            : "цель: нет";
+        meta.textContent = [trackerTypeLabel(tracker), goalText].join(" · ");
+        title.appendChild(name);
+        title.appendChild(meta);
+
+        const badge = document.createElement("div");
+        badge.className = "habit-badge";
+        let badgeValue = safeNumber(streak || 0);
+        let badgePeriod = tracker.streak_period || "day";
+        let badgeTitle = "Стрик по привычке";
+        if (goalPeriod) {
+          const goalValue = safeNumber(goalStreak || 0);
+          if (goalValue > 0) {
+            badgeValue = goalValue;
+            badgePeriod = goalPeriod;
+            badgeTitle = "Стрик по цели";
+          }
+        }
+        const streakSuffix = periodLabel(badgePeriod);
+        badge.textContent = `🔥 ${badgeValue}${streakSuffix ? ` ${streakSuffix}` : ""}`;
+        badge.title = `${badgeTitle}: ${badgeValue}${streakSuffix ? ` ${streakSuffix}` : ""}`;
+
+        header.appendChild(title);
+        header.appendChild(badge);
+        card.appendChild(header);
+
+        const chips = document.createElement("div");
+        chips.className = "habit-chips";
+
+        const todayChip = document.createElement("div");
+        todayChip.className = "habit-chip";
+        const todayValue = miniTooltip(tracker, dailyStats ? dailyStats.get(todayKey) : null);
+        todayChip.innerHTML = `Сегодня <strong>${todayValue}</strong>`;
+        chips.appendChild(todayChip);
+
+        const goalChip = document.createElement("div");
+        goalChip.className = "habit-chip";
+        if (goalProgress && goalProgress.target && goalPeriod) {
+          const percent = goalProgress.target > 0 ? Math.round((goalProgress.progress / goalProgress.target) * 100) : 0;
+          const period = periodLabel(goalPeriod);
+          const labelValue = formatGoalLabel(tracker, goalProgress.progress, goalProgress.target);
+          const periodSuffix = period ? ` ${period}` : "";
+          goalChip.innerHTML = `🎯 <strong>${labelValue}${periodSuffix}</strong> · ${percent}%`;
+        } else {
+          goalChip.classList.add("muted");
+          goalChip.textContent = "🎯 без цели";
+        }
+        chips.appendChild(goalChip);
+
+        const xpChip = document.createElement("div");
+        xpChip.className = "habit-chip hide-mobile";
+        xpChip.innerHTML = `XP <strong>${safeNumber(xpTotal || 0)}</strong>`;
+        chips.appendChild(xpChip);
+
+        card.appendChild(chips);
+
+        return card;
+      }
+
+      function formatGoalLabel(tracker, progress, target) {
+        const unit = tracker.unit ? String(tracker.unit) : "";
+        if (tracker.type === "scale") {
+          return `${progress.toFixed(1)}/${target.toFixed(1)}`;
+        }
+        const safeProgress = Math.round(progress * 10) / 10;
+        const safeTarget = Math.round(target * 10) / 10;
+        return `${safeProgress}/${safeTarget}${unit}`;
+      }
+
+      function goalCell(tracker, data, period) {
+        const cell = document.createElement("div");
+        cell.className = "goal-cell";
+        const label = document.createElement("div");
+        label.className = "goal-label";
+        label.textContent = periodLabel(period);
+        cell.appendChild(label);
+        if (!data) {
+          const empty = document.createElement("div");
+          empty.className = "muted";
+          empty.textContent = "нет цели";
+          cell.appendChild(empty);
+          return cell;
+        }
+        const labelValue = formatGoalLabel(tracker, data.progress, data.target);
+        const percent = Math.round(data.percent);
+        const metric = document.createElement("div");
+        metric.className = "goal-metric";
+        const left = document.createElement("strong");
+        left.textContent = labelValue;
+        const right = document.createElement("span");
+        right.textContent = `${percent}%${data.streak ? ` · 🔥${data.streak}` : ""}`;
+        metric.appendChild(left);
+        metric.appendChild(right);
+
+        const bar = document.createElement("div");
+        bar.className = "goal-bar";
+        const fill = document.createElement("div");
+        fill.style.width = `${clamp(data.percent, 0, 140)}%`;
+        bar.appendChild(fill);
+
+        cell.title = `${tracker.name} · ${periodLabel(period)}: ${labelValue} (${percent}%)`;
+        cell.appendChild(metric);
+        cell.appendChild(bar);
+        return cell;
+      }
+
+      function goalCompactCard(tracker, data, period) {
+        const card = document.createElement("div");
+        card.className = "goal-compact";
+
+        const title = document.createElement("div");
+        title.className = "goal-compact-title";
+        title.textContent = tracker.name;
+        card.appendChild(title);
+
+        if (!data) {
+          const empty = document.createElement("div");
+          empty.className = "muted";
+          empty.textContent = "нет цели";
+          card.appendChild(empty);
+          return card;
+        }
+
+        const labelValue = formatGoalLabel(tracker, data.progress, data.target);
+        const percent = Math.round(data.percent);
+        const periodLabelText = periodLabel(period);
+        const metric = document.createElement("div");
+        metric.className = "goal-compact-metric";
+        const left = document.createElement("strong");
+        left.textContent = labelValue;
+        const right = document.createElement("span");
+        right.textContent = `${periodLabelText ? `${periodLabelText} · ` : ""}${percent}%${data.streak ? ` · 🔥${data.streak}` : ""}`;
+        metric.appendChild(left);
+        metric.appendChild(right);
+        card.appendChild(metric);
+
+        const bar = document.createElement("div");
+        bar.className = "goal-compact-bar";
+        const fill = document.createElement("div");
+        fill.style.width = `${clamp(data.percent, 0, 140)}%`;
+        bar.appendChild(fill);
+        card.appendChild(bar);
+
+        card.title = `${tracker.name} · ${periodLabel(period)}: ${labelValue} (${percent}%)`;
+        return card;
+      }
+
+      function miniTooltip(tracker, stat) {
+        if (!stat || stat.count <= 0) return "—";
+        if (tracker.type === "binary") {
+          return stat.countNonPartial > 0 ? "✅" : "↩️";
+        }
+        if (tracker.type === "scale") {
+          return (stat.sum / stat.count).toFixed(1) + "/10";
+        }
+        const value = Math.round(stat.sum * 10) / 10;
+        return tracker.unit ? `${value}${tracker.unit}` : String(value);
+      }
+
+      function miniLevel(tracker, stat) {
+        if (!stat || stat.count <= 0) return 0;
+        if (tracker.type === "binary") {
+          return stat.countNonPartial > 0 ? 4 : 2;
+        }
+        if (tracker.type === "scale") {
+          const avg = stat.sum / stat.count;
+          const ratio = clamp(avg / 10, 0, 1);
+          return intensityLevel(ratio, [0.25, 0.5, 0.85]);
+        }
+        const target = safeNumber(tracker.target || 0);
+        const ratio = target > 0 ? clamp(stat.sum / target, 0, 1.2) : stat.sum > 0 ? 1 : 0;
+        return intensityLevel(ratio, [0.25, 0.5, 0.95]);
+      }
+
+      function countActiveDays(activityByDate, startKey, endKey) {
+        let count = 0;
+        for (let current = startKey; current <= endKey; current = addDaysKey(current, 1)) {
+          if (safeNumber(activityByDate.get(current) || 0) > 0) count += 1;
+        }
+        return count;
+      }
+
+      function renderHeatmap(container, activityByDate, xpByDate, startKey, endKey, todayKey) {
+        container.innerHTML = "";
+        const startDate = keyToDate(startKey);
+        const endDate = keyToDate(endKey);
+        const daysInRange = Math.round((endDate - startDate) / 86_400_000) + 1;
+        const padDays = (7 - (daysInRange % 7)) % 7;
+        const cells = [];
+        let current = startKey;
+        const finalKey = padDays ? addDaysKey(endKey, padDays) : endKey;
+        while (current <= finalKey) {
+          const xp = safeNumber(xpByDate.get(current) || 0);
+          const activity = safeNumber(activityByDate.get(current) || 0);
+          const intensity = xp + activity * 2;
+          cells.push({
+            key: current,
+            xp,
+            activity,
+            intensity,
+            outside: current > endKey,
+            future: current > todayKey,
+          });
+          current = addDaysKey(current, 1);
+        }
+
+        const thresholds = computeHeatmapThresholds(cells.map((cell) => cell.intensity));
+        for (const cell of cells) {
+          const el = document.createElement("div");
+          el.className = "cell";
+          if (cell.outside) el.classList.add("outside");
+          if (cell.future) el.classList.add("future");
+          const level = intensityLevel(cell.intensity, thresholds);
+          if (level > 0) el.classList.add(`l${level}`);
+          el.title = `${cell.key}: ${cell.xp} XP · событий ${cell.activity}`;
+          container.appendChild(el);
+        }
+      }
+
+      function renderChart(labels, values) {
+        if (!window.Chart) return;
+        if (state.chart) {
+          state.chart.destroy();
+          state.chart = null;
+        }
+
+        const context = ui.xpChart.getContext("2d");
+        state.chart = new Chart(context, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "XP",
+                data: values,
+                borderColor: "rgba(61,220,151,.85)",
+                backgroundColor: "rgba(61,220,151,.12)",
+                fill: true,
+                tension: 0.35,
+                pointRadius: 0,
+                borderWidth: 2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.parsed.y} XP`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                ticks: { color: "rgba(170,176,192,.8)", maxRotation: 0, autoSkip: true },
+                grid: { color: "rgba(255,255,255,.06)" },
+              },
+              y: {
+                ticks: { color: "rgba(170,176,192,.8)" },
+                grid: { color: "rgba(255,255,255,.06)" },
+              },
+            },
+          },
+        });
+      }
+
+      function renderMonthlyChart(labels, values) {
+        if (!window.Chart || !ui.monthlyChart) return;
+        if (state.monthChart) {
+          state.monthChart.destroy();
+          state.monthChart = null;
+        }
+
+        const context = ui.monthlyChart.getContext("2d");
+        state.monthChart = new Chart(context, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Прогресс",
+                data: values,
+                borderColor: "rgba(61,220,151,.85)",
+                backgroundColor: "rgba(61,220,151,.16)",
+                fill: true,
+                tension: 0.35,
+                pointRadius: 0,
+                borderWidth: 2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.parsed.y}%`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                ticks: { color: "rgba(170,176,192,.8)", maxRotation: 0, autoSkip: true },
+                grid: { color: "rgba(255,255,255,.06)" },
+              },
+              y: {
+                min: 0,
+                max: 100,
+                ticks: { color: "rgba(170,176,192,.8)" },
+                grid: { color: "rgba(255,255,255,.06)" },
+              },
+            },
+          },
+        });
+      }
+
+      function showAuthCard(show) {
+        ui.authCard.hidden = true;
+        setLoading(show, ui.loadingSub.textContent || "Загружаю данные…", show && ui.loadingCard.classList.contains("error"));
+      }
+
+      function setAuthStatus(text, isError = false) {
+        setLoading(true, text || "Загружаю данные…", isError);
+      }
+
+      async function loadAuthConfig() {
+        try {
+          const response = await fetch("/auth/config", { cache: "no-store" });
+          if (!response.ok) return null;
+          return await response.json();
+        } catch (_error) {
+          return null;
+        }
+      }
+
+      function renderLoginWidget(config) {
+        ui.tgLoginWidget.innerHTML = "";
+        if (!config || !config.bot_username || !config.auth_url) return;
+        const script = document.createElement("script");
+        script.async = true;
+        script.src = "https://telegram.org/js/telegram-widget.js?22";
+        script.dataset.telegramLogin = config.bot_username;
+        script.dataset.size = "large";
+        script.dataset.userpic = "false";
+        script.dataset.requestAccess = "write";
+        script.dataset.authUrl = config.auth_url;
+        script.dataset.lang = "ru";
+        ui.tgLoginWidget.appendChild(script);
+      }
+
+      function updateOpenInTelegramLink(config) {
+        let url = config && config.webapp_url ? config.webapp_url : "";
+        if (!url && config && config.bot_username) {
+          url = `https://t.me/${config.bot_username}?startapp=analytics`;
+        }
+        if (url) {
+          ui.openInTelegram.href = url;
+          ui.openInTelegram.style.display = "";
+        } else {
+          ui.openInTelegram.style.display = "none";
+        }
+      }
+
+      function isTelegramWebApp() {
+        const tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.platform && tg.platform !== "unknown") return true;
+        if (tg && tg.initData) return true;
+        const hash = window.location.hash || "";
+        return hash.includes("tgWebAppData=");
+      }
+
+      function getInitDataFromHash() {
+        const hash = window.location.hash || "";
+        if (!hash.startsWith("#")) return "";
+        const params = new URLSearchParams(hash.slice(1));
+        return params.get("tgWebAppData") || "";
+      }
+
+      function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      async function loginViaWebApp(retries = 8, delayMs = 300) {
+        const tg = window.Telegram && window.Telegram.WebApp;
+        try {
+          tg && tg.ready();
+        } catch (_error) {
+          // ignore
+        }
+        for (let attempt = 0; attempt <= retries; attempt += 1) {
+          const initData = (tg && tg.initData) || getInitDataFromHash();
+          if (initData) {
+            const response = await fetch("/auth/telegram", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ init_data: initData }),
+            });
+            if (response.ok) return true;
+            try {
+              const data = await response.json();
+              setAuthStatus(`Ошибка входа: ${data.error || "invalid_auth"}`, true);
+            } catch (_error) {
+              setAuthStatus("Ошибка входа через Telegram.", true);
+            }
+            return false;
+          }
+          await sleep(delayMs);
+        }
+        setAuthStatus(
+          "Telegram не передал данные входа. Обнови Telegram и открой аналитику через кнопку в боте. Если домен в блокировке — нужен новый домен.",
+          true
+        );
+        return false;
+      }
+
+      async function checkSession() {
+        const response = await fetch("/auth/me", { credentials: "include", cache: "no-store" });
+        return response.ok;
+      }
+
+      async function loadDbFromServer({ cacheBust = true } = {}) {
+        if (!state.SQL) throw new Error("SQL.js not loaded");
+        const url = cacheBust ? `/api/db?ts=${Date.now()}` : "/api/db";
+        const response = await fetch(url, { credentials: "include", cache: "no-store" });
+        if (!response.ok) return false;
+        const buffer = await response.arrayBuffer();
+        state.db = new state.SQL.Database(new Uint8Array(buffer));
+        state.dataSource = "telegram";
+        state.lastDbLoadedAt = Date.now();
+        ui.status.classList.remove("error");
+        ui.status.textContent = "Данные загружены из аккаунта Telegram.";
+        loadUsers();
+        setLoading(false);
+        return true;
+      }
+
+      async function initAuthAndLoad() {
+        setLoading(true, "Загружаю аналитику…");
+        const isTelegram = isTelegramWebApp();
+        const tg = window.Telegram && window.Telegram.WebApp;
+        if (isTelegram && tg) {
+          try {
+            tg.ready();
+            tg.expand();
+          } catch (_error) {
+            // ignore
+          }
+        }
+        ui.tgLoginWidget.style.display = "none";
+        if (!isTelegram) {
+          ui.retryAuth.hidden = true;
+          ui.openInTelegram.textContent = "Открыть в Telegram";
+          ui.authHint.textContent = "Мини‑апп доступен только внутри Telegram.";
+          setLoading(true, "Открой аналитику через кнопку в боте.", true);
+          const config = await loadAuthConfig();
+          if (config) {
+            updateOpenInTelegramLink(config);
+          } else {
+            ui.openInTelegram.style.display = "none";
+            setAuthStatus("Не удалось загрузить настройки входа.", true);
+          }
+          return false;
+        }
+        ui.retryAuth.hidden = false;
+        ui.openInTelegram.style.display = "none";
+        ui.authHint.textContent = "Открыто внутри Telegram. Идет авто-вход…";
+        let authed = false;
+        try {
+          authed = await checkSession();
+        } catch (_error) {
+          authed = false;
+        }
+        if (!authed) {
+          try {
+            authed = await loginViaWebApp();
+          } catch (_error) {
+            authed = false;
+          }
+        }
+        if (authed) {
+          try {
+            const loaded = await loadDbFromServer();
+            if (loaded) return true;
+          } catch (_error) {
+            ui.status.classList.add("error");
+            ui.status.textContent = "Не удалось загрузить данные пользователя.";
+          }
+        }
+        setLoading(true, "Не удалось загрузить данные. Попробуй ещё раз.", true);
+        const config = await loadAuthConfig();
+        if (config) {
+          updateOpenInTelegramLink(config);
+        } else {
+          ui.openInTelegram.style.display = "none";
+          setAuthStatus("Не удалось загрузить настройки входа.", true);
+        }
+        ui.openInTelegram.style.display = "none";
+        return false;
+      }
+
+      async function loadSql() {
+        try {
+          state.SQL = await initSqlJs({
+            locateFile: (file) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${file}`,
+          });
+          ui.status.textContent = "Готово. Пытаюсь открыть bot.db автоматически…";
+          ui.status.classList.remove("error");
+        } catch (error) {
+          ui.status.classList.add("error");
+          ui.status.textContent =
+            "Не удалось загрузить sql.js (SQLite в браузере). Попробуй открыть страницу через http (например, `python3 -m http.server`).";
+          throw error;
+        }
+      }
+
+      async function autoLoadDbIfAvailable() {
+        const candidates = [
+          new URL("../bot.db", window.location.href).toString(),
+          new URL("/bot.db", window.location.href).toString(),
+        ];
+        for (const url of candidates) {
+          try {
+            const response = await fetch(url, { cache: "no-store" });
+            if (!response.ok) continue;
+            const buffer = await response.arrayBuffer();
+            state.db = new state.SQL.Database(new Uint8Array(buffer));
+            state.dataSource = "auto";
+            state.lastDbLoadedAt = Date.now();
+            ui.status.classList.remove("error");
+            ui.status.textContent = `Загружено автоматически: ${url}`;
+            loadUsers();
+            return true;
+          } catch (_error) {
+            // ignore
+          }
+        }
+        ui.status.textContent = "Войди через Telegram или выбери файл bot.db (для локального режима).";
+        openControlsPopover();
+        return false;
+      }
+
+      function loadUsers() {
+        const db = state.db;
+        if (!db) return;
+        const prevUserId = safeNumber(state.selectedUserId || 0);
+        const prevMonthOffset = safeNumber(state.monthOffset || 0);
+        const cols = tableColumns(db, "users");
+        const selectCols = ["id", "tg_id", "tz", "level", "xp", "streak", "first_name", "last_name", "username"].filter((c) =>
+          cols.includes(c)
+        );
+        state.users = queryAll(db, `SELECT ${selectCols.join(", ")} FROM users ORDER BY id ASC`);
+        ui.userSelect.innerHTML = "";
+        for (const user of state.users) {
+          const opt = document.createElement("option");
+          opt.value = String(user.id);
+          opt.textContent = `${displayName(user)} · lvl ${user.level ?? 1}`;
+          ui.userSelect.appendChild(opt);
+        }
+        ui.userSelect.style.display = state.users.length > 1 ? "" : "none";
+        ui.userSelect.disabled = state.users.length === 0;
+        ui.rangeSelect.disabled = state.users.length === 0;
+        if (state.users.length > 0) {
+          const preferred =
+            prevUserId && state.users.some((user) => safeNumber(user.id) === prevUserId) ? prevUserId : safeNumber(state.users[0].id);
+          state.selectedUserId = preferred;
+          ui.userSelect.value = String(state.selectedUserId);
+          state.monthOffset = preferred === prevUserId ? prevMonthOffset : 0;
+          render();
+          setLoading(false);
+          closeControlsPopover();
+        } else {
+          ui.status.classList.add("error");
+          ui.status.textContent = "В базе нет пользователей (таблица users пустая).";
+          setLoading(true, "В базе нет пользователей.", true);
+          openControlsPopover();
+        }
+      }
+
+      function shouldRefreshDb() {
+        const now = Date.now();
+        if (!state.lastDbLoadedAt) return true;
+        return now - state.lastDbLoadedAt > 8000;
+      }
+
+      async function refreshDb(reason = "") {
+        if (!state.SQL) return false;
+        if (!isTelegramWebApp()) return false;
+        if (state.dataSource && state.dataSource !== "telegram") return false;
+        if (!shouldRefreshDb()) return false;
+        if (state.dbRefreshInFlight) return state.dbRefreshInFlight;
+
+        state.dbRefreshInFlight = (async () => {
+          let authed = false;
+          try {
+            authed = await checkSession();
+          } catch (_error) {
+            authed = false;
+          }
+          if (!authed) {
+            try {
+              authed = await loginViaWebApp();
+            } catch (_error) {
+              authed = false;
+            }
+          }
+          if (!authed) return false;
+          try {
+            return await loadDbFromServer({ cacheBust: true });
+          } catch (_error) {
+            return false;
+          }
+        })().finally(() => {
+          state.dbRefreshInFlight = null;
+        });
+
+        return state.dbRefreshInFlight;
+      }
+
+      function setupAutoRefresh() {
+        let scheduled = null;
+        const schedule = (reason) => {
+          if (!isTelegramWebApp()) return;
+          if (scheduled) clearTimeout(scheduled);
+          scheduled = setTimeout(() => {
+            scheduled = null;
+            refreshDb(reason);
+          }, 250);
+        };
+
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") schedule("visibility");
+        });
+        window.addEventListener("focus", () => schedule("focus"));
+        window.addEventListener("pageshow", () => schedule("pageshow"));
+
+        const tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && typeof tg.onEvent === "function") {
+          tg.onEvent("viewportChanged", () => schedule("viewport"));
+        }
+      }
+
+      function makeRng(seed) {
+        let value = seed % 2147483647;
+        if (value <= 0) value += 2147483646;
+        return function () {
+          value = (value * 16807) % 2147483647;
+          return (value - 1) / 2147483646;
+        };
+      }
+
+      function demoDateKeys(endKey) {
+        const keys = [];
+        for (let i = 364; i >= 0; i -= 1) {
+          keys.push(addDaysKey(endKey, -i));
+        }
+        return keys;
+      }
+
+      function makeWindows(rng, count, minLength, maxLength, totalDays) {
+        const windows = [];
+        for (let i = 0; i < count; i += 1) {
+          const length = Math.floor(minLength + rng() * (maxLength - minLength + 1));
+          const start = Math.floor(rng() * Math.max(1, totalDays - length));
+          windows.push({ start, end: start + length });
+        }
+        return windows;
+      }
+
+      function indexInWindows(index, windows) {
+        return windows.some((window) => index >= window.start && index <= window.end);
+      }
+
+      function createDemoDatabase() {
+        const db = new state.SQL.Database();
+        db.run(`
+          CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            tg_id INTEGER,
+            first_name TEXT,
+            last_name TEXT,
+            username TEXT,
+            created_at TEXT,
+            tz TEXT,
+            level INTEGER,
+            xp INTEGER,
+            streak INTEGER,
+            streak_last_date TEXT,
+            google_sheet_url TEXT
+          );
+          CREATE TABLE trackers (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            name TEXT,
+            type TEXT,
+            difficulty TEXT,
+            xp INTEGER,
+            period TEXT,
+            target INTEGER,
+            unit TEXT,
+            active INTEGER,
+            order_index INTEGER,
+            days TEXT,
+            streak_enabled INTEGER,
+            streak_mode TEXT,
+            streak_period TEXT,
+            streak_min_value REAL,
+            streak_partial_ok INTEGER,
+            xp_count_map TEXT,
+            xp_scale_min INTEGER,
+            xp_scale_max INTEGER
+          );
+          CREATE TABLE tracker_logs (
+            id INTEGER PRIMARY KEY,
+            tracker_id INTEGER,
+            date TEXT,
+            value REAL,
+            partial INTEGER,
+            created_at TEXT
+          );
+          CREATE TABLE tracker_goals (
+            id INTEGER PRIMARY KEY,
+            tracker_id INTEGER,
+            period TEXT,
+            target REAL
+          );
+          CREATE TABLE missions (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            date TEXT,
+            text TEXT,
+            status TEXT
+          );
+          CREATE TABLE journal_entries (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            date TEXT,
+            text TEXT
+          );
+          CREATE TABLE journal_weekly_reports (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER,
+            week_start TEXT,
+            week_end TEXT,
+            analysis_text TEXT
+          );
+        `);
+
+        const userId = 1;
+        const nowKey = todayKeyForTz("UTC+3");
+        db.run(
+          `INSERT INTO users (id, tg_id, first_name, last_name, username, created_at, tz, level, xp, streak, streak_last_date, google_sheet_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            userId,
+            42424242,
+            "Николай",
+            "Латышев",
+            "must_player",
+            nowKey,
+            "UTC+3",
+            14,
+            72,
+            37,
+            nowKey,
+            "https://docs.google.com/spreadsheets/d/demo",
+          ]
+        );
+
+        const trackers = [
+          { id: 1, name: "Медитация", type: "binary", xp: 6, target: 1, unit: "" },
+          { id: 2, name: "Глубокая работа", type: "time", xp: 3, target: 2, unit: "ч" },
+          { id: 3, name: "Тренировки", type: "count", xp: 8, target: 1, unit: "" },
+          { id: 4, name: "Чтение", type: "time", xp: 2, target: 1, unit: "ч" },
+          { id: 5, name: "Сон", type: "scale", xp: 0, target: 0, unit: "" },
+          { id: 6, name: "Шаги", type: "count", xp: 4, target: 1, unit: "k" },
+        ];
+
+        const trackerStmt = db.prepare(
+          `INSERT INTO trackers (id, user_id, name, type, difficulty, xp, period, target, unit, active, order_index, days, streak_enabled, streak_mode, streak_period, streak_min_value, streak_partial_ok, xp_count_map, xp_scale_min, xp_scale_max)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        );
+        trackers.forEach((tracker, index) => {
+          trackerStmt.run([
+            tracker.id,
+            userId,
+            tracker.name,
+            tracker.type,
+            "medium",
+            tracker.xp,
+            "day",
+            tracker.target,
+            tracker.unit,
+            1,
+            index + 1,
+            "Пн,Вт,Ср,Чт,Пт,Сб,Вс",
+            1,
+            "activity",
+            "day",
+            tracker.type === "time" ? 1 : 0,
+            1,
+            tracker.type === "count" ? JSON.stringify({ 1: 4, 2: 8, 3: 12 }) : null,
+            tracker.type === "scale" ? 3 : null,
+            tracker.type === "scale" ? 9 : null,
+          ]);
+        });
+        trackerStmt.free();
+
+        const goalsStmt = db.prepare(
+          `INSERT INTO tracker_goals (id, tracker_id, period, target) VALUES (?, ?, ?, ?)`
+        );
+        let goalId = 1;
+        const goalTargets = {
+          1: { year: 260, month: 20, week: 5 },
+          2: { year: 620, month: 60, week: 12 },
+          3: { year: 160, month: 14, week: 3 },
+          4: { year: 210, month: 18, week: 4 },
+          5: { year: 7.6, month: 7.5, week: 7.4 },
+          6: { year: 260, month: 22, week: 5 },
+        };
+        trackers.forEach((tracker) => {
+          const targets = goalTargets[tracker.id] || {};
+          Object.entries(targets).forEach(([period, target]) => {
+            goalsStmt.run([goalId, tracker.id, period, target]);
+            goalId += 1;
+          });
+        });
+        goalsStmt.free();
+
+        const logStmt = db.prepare(
+          `INSERT INTO tracker_logs (id, tracker_id, date, value, partial, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+        );
+        const missionStmt = db.prepare(
+          `INSERT INTO missions (id, user_id, date, text, status) VALUES (?, ?, ?, ?, ?)`
+        );
+        const journalStmt = db.prepare(
+          `INSERT INTO journal_entries (id, user_id, date, text) VALUES (?, ?, ?, ?)`
+        );
+
+        const rng = makeRng(17);
+        const keys = demoDateKeys(nowKey);
+        const slumpWindows = makeWindows(rng, 3, 6, 14, keys.length);
+        const surgeWindows = makeWindows(rng, 2, 5, 11, keys.length);
+        const monthFactors = [0.85, 0.88, 0.95, 1.05, 1.1, 1.15, 1.2, 1.15, 1.05, 0.98, 0.92, 0.88];
+        let logId = 1;
+        let missionId = 1;
+        let journalId = 1;
+        const missionTexts = [
+          "Фокус дня: сделать ключевую задачу",
+          "Собрать силы и закрыть один важный блок",
+          "Прогресс по проекту + здоровье",
+          "Продвинуться на 1 шаг в главной цели",
+        ];
+        const journalSnippets = [
+          "Сегодня был ясный фокус и хорошая энергия.",
+          "Устал, но сделал минимально важное.",
+          "Удалось держать темп и не сорваться.",
+          "Поймал продуктивный ритм, стоит закрепить.",
+          "Нужно лучше распределять нагрузку.",
+        ];
+        keys.forEach((key, index) => {
+          const date = key;
+          const dateObj = keyToDate(date);
+          const dayOfWeek = dateObj.getUTCDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+          const monthFactor = monthFactors[dateObj.getUTCMonth()] || 1;
+          let energy = monthFactor * (isWeekend ? 0.9 : 1.05);
+          if (indexInWindows(index, slumpWindows)) energy *= 0.55;
+          if (indexInWindows(index, surgeWindows)) energy *= 1.25;
+          energy *= 0.85 + rng() * 0.4;
+          if (rng() < 0.06) energy *= 1.35;
+          if (rng() < 0.05) energy *= 0.6;
+          energy = clamp(energy, 0.35, 1.6);
+          trackers.forEach((tracker) => {
+            let chance = 0.55;
+            if (tracker.type === "binary") chance = isWeekend ? 0.65 : 0.85;
+            if (tracker.type === "time") chance = isWeekend ? 0.32 : 0.72;
+            if (tracker.type === "count") chance = isWeekend ? 0.45 : 0.68;
+            if (tracker.type === "scale") chance = 0.82;
+            chance *= energy * (0.9 + rng() * 0.2);
+            chance = clamp(chance, 0.08, 0.97);
+            if (rng() > chance) return;
+            let value = 1;
+            let partial = 0;
+            if (tracker.type === "time") {
+              const base = (0.8 + rng() * 2.6) * (0.7 + energy * 0.5);
+              value = Math.round(clamp(base, 0.5, 4.5) * 10) / 10;
+            }
+            if (tracker.type === "count") {
+              const highChance = clamp(0.2 + (energy - 0.9) * 0.5, 0.1, 0.6);
+              value = rng() < highChance ? 2 : 1;
+              if (energy > 1.2 && rng() < 0.2) value = 3;
+            }
+            if (tracker.type === "scale") {
+              const base = 6.2 + rng() * 2.6 + (energy - 1) * 1.5;
+              value = Math.round(clamp(base, 4.8, 9.7) * 10) / 10;
+            }
+            if (tracker.type === "binary") {
+              const partialChance = energy < 0.75 ? 0.25 : 0.1;
+              if (rng() < partialChance) {
+                value = 0.5;
+                partial = 1;
+              }
+            }
+            logStmt.run([logId, tracker.id, date, value, partial, date]);
+            logId += 1;
+          });
+
+          const missionChance = clamp(0.55 + energy * 0.35, 0.4, 0.92);
+          if (rng() < missionChance) {
+            const roll = rng();
+            const status = roll < 0.62 ? "done" : roll < 0.78 ? "partial" : roll < 0.9 ? "set" : "fail";
+            const text = missionTexts[index % missionTexts.length];
+            missionStmt.run([missionId, userId, date, text, status]);
+            missionId += 1;
+          }
+
+          const journalChance = clamp(0.25 + energy * 0.2, 0.18, 0.6);
+          if (rng() < journalChance) {
+            const text = journalSnippets[index % journalSnippets.length];
+            journalStmt.run([journalId, userId, date, text]);
+            journalId += 1;
+          }
+        });
+
+        logStmt.free();
+        missionStmt.free();
+        journalStmt.free();
+
+        const lastWeekEnd = nowKey;
+        const lastWeekStart = addDaysKey(nowKey, -6);
+        db.run(
+          `INSERT INTO journal_weekly_reports (id, user_id, week_start, week_end, analysis_text)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            1,
+            userId,
+            lastWeekStart,
+            lastWeekEnd,
+            "Неделя ровная: стабильные ритуалы, но есть просадки по выходным. Лучший рычаг — планировать 1 ключевую задачу заранее. Эксперименты: 1) утренний блок 25–50 минут, 2) фиксированное время на сон, 3) короткий вечерний обзор.",
+          ]
+        );
+
+        return db;
+      }
+
+      async function loadDbFromFile(file) {
+        if (!state.SQL) throw new Error("SQL.js not loaded");
+        const buffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        state.db = new state.SQL.Database(bytes);
+        state.dataSource = "file";
+        state.lastDbLoadedAt = Date.now();
+        ui.status.classList.remove("error");
+        ui.status.textContent = `Загружено: ${file.name}`;
+        loadUsers();
+      }
+
+      if (ui.controlsFab) {
+        ui.controlsFab.addEventListener("click", () => {
+          toggleControlsPopover();
+        });
+      }
+
+      ui.controlsCloseBtn.addEventListener("click", () => {
+        closeControlsPopover();
+      });
+
+      ui.pickFileBtn.addEventListener("click", () => {
+        ui.dbFile.click();
+      });
+
+      ui.dbFile.addEventListener("change", async (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        try {
+          await loadDbFromFile(file);
+        } catch (error) {
+          ui.status.classList.add("error");
+          ui.status.textContent = `Не удалось открыть базу: ${String(error)}`;
+        }
+      });
+
+      ui.demoBtn.addEventListener("click", () => {
+        if (!state.SQL) return;
+        state.db = createDemoDatabase();
+        state.dataSource = "demo";
+        state.lastDbLoadedAt = Date.now();
+        state.rangeDays = 365;
+        ui.rangeSelect.value = "365";
+        ui.status.classList.remove("error");
+        ui.status.textContent = "Демо-данные: год активности";
+        loadUsers();
+      });
+
+      ui.autoBtn.addEventListener("click", async () => {
+        if (!state.SQL) return;
+        await autoLoadDbIfAvailable();
+      });
+
+      ui.userSelect.addEventListener("change", () => {
+        state.selectedUserId = safeNumber(ui.userSelect.value);
+        state.monthOffset = 0;
+        render();
+      });
+
+      ui.rangeSelect.addEventListener("change", () => {
+        state.rangeDays = safeNumber(ui.rangeSelect.value) || 30;
+        render();
+      });
+
+      if (ui.viewOverviewToggle) {
+        ui.viewOverviewToggle.addEventListener("change", () => {
+          if (ui.viewOverviewToggle.checked) setActiveView("overview");
+        });
+      }
+      if (ui.viewMonthlyToggle) {
+        ui.viewMonthlyToggle.addEventListener("change", () => {
+          if (ui.viewMonthlyToggle.checked) setActiveView("monthly");
+        });
+      }
+      if (ui.bottomNav) {
+        const navButtons = Array.from(ui.bottomNav.querySelectorAll(".nav-btn"));
+        for (const btn of navButtons) {
+          btn.addEventListener("click", () => {
+            const desired = btn.dataset.view;
+            if (!desired) return;
+            requestAnimationFrame(() => {
+              if (desired === "monthly" && ui.viewMonthlyToggle && !ui.viewMonthlyToggle.checked) {
+                setActiveView("monthly");
+              }
+              if (desired === "overview" && ui.viewOverviewToggle && !ui.viewOverviewToggle.checked) {
+                setActiveView("overview");
+              }
+            });
+          });
+        }
+      }
+      if (ui.monthPrevBtn) {
+        ui.monthPrevBtn.addEventListener("click", () => {
+          state.monthOffset = safeNumber(state.monthOffset || 0) - 1;
+          renderMonthlyView();
+        });
+      }
+      if (ui.monthNextBtn) {
+        ui.monthNextBtn.addEventListener("click", () => {
+          if (safeNumber(state.monthOffset || 0) >= 0) return;
+          state.monthOffset = safeNumber(state.monthOffset || 0) + 1;
+          renderMonthlyView();
+        });
+      }
+
+      ui.retryAuth.addEventListener("click", async () => {
+        await initAuthAndLoad();
+      });
+      ui.loadingRetry.addEventListener("click", async () => {
+        await initAuthAndLoad();
+      });
+
+      document.addEventListener("click", (event) => {
+        if (ui.controlsPopover.hidden) return;
+        if (ui.controlsPopover.contains(event.target)) return;
+        if (ui.controlsFab && ui.controlsFab.contains(event.target)) return;
+        closeControlsPopover();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeControlsPopover();
+      });
+
+      (async () => {
+        await loadSql();
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("demo") === "1") {
+          state.db = createDemoDatabase();
+          state.dataSource = "demo";
+          state.lastDbLoadedAt = Date.now();
+          state.rangeDays = 365;
+          ui.rangeSelect.value = "365";
+          ui.status.classList.remove("error");
+          ui.status.textContent = "Демо-данные: год активности";
+          loadUsers();
+          return;
+        }
+        const authed = await initAuthAndLoad();
+        setupAutoRefresh();
+        if (authed) return;
+        if (!isTelegramWebApp()) {
+          await autoLoadDbIfAvailable();
+        }
+      })();
+    </script>
+  </body>
+</html>

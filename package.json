@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@remotion/cli": "^4.0.408"
+  }
+}

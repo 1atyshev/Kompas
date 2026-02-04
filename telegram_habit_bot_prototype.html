@@ -1,0 +1,1860 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Telegram Habit Bot — Prototype (Buttons + Texts)</title>
+  <style>
+    :root{
+      --bg:#0f1115;
+      --panel:#151822;
+      --panel2:#1b2030;
+      --bubble:#1f2738;
+      --bubble2:#27304a;
+      --text:#e7e9ee;
+      --muted:#aab0c0;
+      --accent:#4aa3ff;
+      --good:#3ddc97;
+      --bad:#ff5c7a;
+      --warn:#ffcc66;
+      --stroke:rgba(255,255,255,.10);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 600px at 20% 0%, rgba(74,163,255,.16), transparent 55%),
+                  radial-gradient(800px 500px at 80% 20%, rgba(61,220,151,.10), transparent 60%),
+                  var(--bg);
+      color:var(--text);
+      display:flex;
+      min-height:100vh;
+      align-items:stretch;
+    }
+    .layout{
+      width:100%;
+      max-width:1200px;
+      margin:0 auto;
+      padding:18px;
+      display:grid;
+      grid-template-columns: 380px 1fr;
+      gap:18px;
+    }
+    @media (max-width: 980px){
+      .layout{grid-template-columns: 1fr;}
+    }
+    .card{
+      background: rgba(21,24,34,.78);
+      border:1px solid var(--stroke);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      backdrop-filter: blur(10px);
+    }
+    .h{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    .title{
+      font-weight:700;
+      letter-spacing:.2px;
+      font-size:14px;
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .pill{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.04);
+      color:var(--muted);
+      white-space:nowrap;
+    }
+    .btn{
+      appearance:none;
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.05);
+      color:var(--text);
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:13px;
+      cursor:pointer;
+      transition:.12s ease;
+      text-align:left;
+    }
+    .btn:hover{ transform: translateY(-1px); border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.07);}
+    .btn:active{ transform: translateY(0px); }
+    .btn.primary{ border-color: rgba(74,163,255,.35); background: rgba(74,163,255,.14); }
+    .btn.good{ border-color: rgba(61,220,151,.35); background: rgba(61,220,151,.14); }
+    .btn.bad{ border-color: rgba(255,92,122,.35); background: rgba(255,92,122,.14); }
+    .btn.warn{ border-color: rgba(255,204,102,.35); background: rgba(255,204,102,.12); }
+    .btn.small{ padding:8px 10px; font-size:12px; border-radius:10px;}
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    .grid3{
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap:10px;
+    }
+    .muted{ color:var(--muted); font-size:12px; line-height:1.35;}
+    .divider{ height:1px; background: var(--stroke); margin:12px 0;}
+    .list{ display:flex; flex-direction:column; gap:8px;}
+    .kbd{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      background: rgba(27,32,48,.70);
+      border:1px solid var(--stroke);
+      border-radius:16px;
+      padding:10px;
+    }
+    .kbdrow{ display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+    .kbdrow.two{ grid-template-columns: repeat(2, 1fr); }
+    .kbdrow.one{ grid-template-columns: 1fr; }
+    .kbd .btn{ text-align:center; }
+    /* Phone */
+    .phone-wrap{ display:flex; align-items:center; justify-content:center; }
+    .phone{
+      width: 390px;
+      max-width: 100%;
+      background: rgba(21,24,34,.92);
+      border: 1px solid var(--stroke);
+      border-radius: 28px;
+      overflow:hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,.45);
+      display:flex;
+      flex-direction:column;
+      height: 780px;
+    }
+    .statusbar{
+      padding:10px 14px;
+      font-size:12px;
+      color:var(--muted);
+      background: rgba(255,255,255,.03);
+      border-bottom:1px solid var(--stroke);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+    }
+    .chat{
+      padding:14px;
+      overflow:auto;
+      flex:1;
+      background:
+        radial-gradient(900px 500px at 30% -10%, rgba(74,163,255,.10), transparent 60%),
+        radial-gradient(700px 500px at 90% 20%, rgba(61,220,151,.08), transparent 65%),
+        rgba(15,17,21,.65);
+    }
+    .bubble{
+      max-width: 96%;
+      background: rgba(31,39,56,.92);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius: 16px;
+      padding:12px 12px;
+      margin: 0 0 10px 0;
+      line-height:1.35;
+      font-size:13px;
+      white-space:pre-wrap;
+    }
+    .bubble .meta{
+      margin-top:8px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .inlinekbd{
+      margin-top:8px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .inline-row{
+      display:grid;
+      gap:8px;
+    }
+    .inline-row.cols1{ grid-template-columns: 1fr; }
+    .inline-row.cols2{ grid-template-columns: 1fr 1fr; }
+    .inline-row.cols3{ grid-template-columns: 1fr 1fr 1fr; }
+    .inline-row.cols4{ grid-template-columns: repeat(4, 1fr); }
+    .inline-row.cols5{ grid-template-columns: repeat(5, 1fr); }
+    .inlinekbd .btn{ text-align:center; padding:10px 8px; border-radius:12px; }
+    .replykbd{
+      border-top:1px solid var(--stroke);
+      background: rgba(27,32,48,.85);
+      padding:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .reply-row{
+      display:grid;
+      grid-template-columns: repeat(3,1fr);
+      gap:8px;
+    }
+    .reply-row .btn{ padding:10px 8px; border-radius:14px; font-size:12.5px;}
+    .toast{
+      position: fixed;
+      left:50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.75);
+      color: white;
+      padding:10px 12px;
+      border-radius: 12px;
+      border:1px solid rgba(255,255,255,.12);
+      font-size:12.5px;
+      opacity:0;
+      pointer-events:none;
+      transition:.18s ease;
+      max-width: min(520px, 92vw);
+      text-align:center;
+      z-index:999;
+    }
+    .toast.show{ opacity:1; bottom: 28px; }
+    /* Modal */
+    .modal-backdrop{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      z-index: 1000;
+    }
+    .modal{
+      width: min(720px, 96vw);
+      background: rgba(21,24,34,.98);
+      border:1px solid var(--stroke);
+      border-radius: 18px;
+      padding:14px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.55);
+    }
+    .modal h3{ margin:6px 0 10px 0; font-size:14px; }
+    .modal textarea, .modal input{
+      width:100%;
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12);
+      color: var(--text);
+      border-radius: 12px;
+      padding:10px 12px;
+      font-size:13px;
+      outline:none;
+    }
+    .modal textarea{ min-height: 110px; resize: vertical; }
+    .modal .actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:10px; }
+    .kbdhint{
+      font-size:11.5px;
+      color: var(--muted);
+      margin-top:8px;
+    }
+    .tag{
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.05);
+      color: var(--muted);
+      font-size:11px;
+      margin-right:6px;
+      margin-top:6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <!-- LEFT: NAV + QUICK LINKS -->
+    <div class="card">
+      <div class="h">
+        <div class="title">🧭 Карта бота (навигация)</div>
+        <div class="pill" id="routePill">route: today</div>
+      </div>
+
+      <div class="muted">
+        Это интерактивный “прототип чата”. Кликай кнопки — справа увидишь тексты и inline-клавиатуры как в Telegram.
+        <div class="kbdhint">Подсказка: кнопка “⬅️ Назад” работает как back stack.</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="list">
+        <button class="btn primary" onclick="nav('today')">🏠 Сегодня (главный)</button>
+        <div class="grid">
+          <button class="btn" onclick="nav('journal')">🗒 Дневник</button>
+          <button class="btn" onclick="nav('goals')">🎯 Цели</button>
+          <button class="btn" onclick="nav('trackers')">✅ Трекеры</button>
+          <button class="btn" onclick="nav('summaries')">📊 Итоги</button>
+          <button class="btn" onclick="nav('profile')">👤 Профиль</button>
+          <button class="btn" onclick="nav('settings')">⚙️ Настройки</button>
+          <button class="btn" onclick="nav('export')">📦 Экспорт</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="title">⚡ Быстрые сценарии</div>
+        <div class="grid">
+          <button class="btn good" onclick="nav('mission_new')">🎯 Задать миссию</button>
+          <button class="btn warn" onclick="nav('checkout')">🌙 Закрыть день</button>
+          <button class="btn" onclick="nav('tracker_add_type')">➕ Добавить трекер</button>
+          <button class="btn" onclick="nav('weekly_review')">📆 Итог недели</button>
+          <button class="btn" onclick="nav('monthly_review')">📅 Итог месяца</button>
+          <button class="btn" onclick="nav('journal_ai_week')">🧠 Анализ недели (ИИ)</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="title">🧩 Что можно редактировать</div>
+        <div class="muted">
+          В каждом объекте есть паттерн: <span class="tag">✏️</span> <span class="tag">⚙️</span> <span class="tag">🗑/🗄</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: PHONE PROTOTYPE -->
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="statusbar">
+          <div>Telegram • Habit Bot</div>
+          <div id="clock"></div>
+        </div>
+
+        <div class="chat" id="chat"></div>
+
+        <!-- Reply keyboard -->
+        <div class="replykbd">
+          <div class="reply-row">
+            <button class="btn" onclick="nav('today')">🏠 Сегодня</button>
+            <button class="btn" onclick="nav('journal')">🗒 Дневник</button>
+            <button class="btn" onclick="nav('goals')">🎯 Цели</button>
+          </div>
+          <div class="reply-row">
+            <button class="btn" onclick="nav('trackers')">✅ Трекеры</button>
+            <button class="btn" onclick="nav('summaries')">📊 Итоги</button>
+            <button class="btn" onclick="nav('profile')">👤 Профиль</button>
+          </div>
+          <div class="reply-row">
+            <button class="btn" onclick="nav('settings')">⚙️ Настройки</button>
+            <button class="btn" onclick="nav('export')">📦 Экспорт</button>
+            <button class="btn" onclick="nav('today')">↩️ Домой</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal">
+      <h3 id="modalTitle">Edit</h3>
+      <div id="modalBody"></div>
+      <div class="actions">
+        <button class="btn small" onclick="closeModal()">Отмена</button>
+        <button class="btn small primary" onclick="modalSave()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ----------------------------
+    // STATE
+    // ----------------------------
+    const state = {
+      route: "today",
+      back: [],
+      user: {
+        level: 12,
+        xpInLevel: 840,
+        xpToNext: 1000,
+        globalStreak: 9,
+        tz: "Asia/Kuala_Lumpur",
+        morningTime: "09:00",
+        eveningTime: "21:30",
+        quiet: "23:30–08:30",
+        scaleXpMode: "by_value", // by_value | fixed
+        encouragementPrompt: "Подбадривай меня дружелюбно, коротко и по делу."
+      },
+      today: {
+        dateLabel: "Сегодня",
+        missionText: "",
+        missionDoneDef: "",
+        missionWhen: "",
+        missionStatus: "not_set", // not_set | done | partial | fail | set
+        scales: {
+          productivity: null,
+          happiness: null,
+          love: null
+        },
+        trackers: [
+          { id:"t_water", type:"binary", name:"Вода", streak:7, xp:10, done:false, partial:false },
+          { id:"t_workout", type:"binary", name:"Тренировка", streak:3, xp:15, done:false, partial:false },
+          { id:"t_medit", type:"binary", name:"Медитация", streak:12, xp:10, done:false, partial:false },
+          { id:"t_work", type:"time", name:"Работа", period:"month", progress:18, target:120, unit:"ч", xpPer:0 },
+          { id:"t_read", type:"count", name:"Чтение", period:"week", progress:40, target:300, unit:"стр", xpPer:0 },
+          { id:"t_steps", type:"count", name:"Шаги", period:"day", progress:6000, target:10000, unit:"", xpPer:0 },
+          { id:"t_stretch", type:"binary", name:"Растяжка", streak:2, xp:5, done:false, partial:false },
+          { id:"t_sleep", type:"time", name:"Сон", period:"day", progress:0, target:8, unit:"ч", xpPer:0 },
+          { id:"t_pages", type:"count", name:"Страницы (работа)", period:"month", progress:0, target:200, unit:"стр", xpPer:0 },
+          { id:"t_deep", type:"binary", name:"Deep work (2×25м)", streak:5, xp:15, done:false, partial:false },
+        ],
+        journal: ""
+      },
+      goals: {
+        year: [
+          { id:"g_blog", title:"Стать сильнее в контенте", metric:"100 роликов в 2026", expected:"К январю: 8 роликов", progress:"4/8" },
+          { id:"g_fitness", title:"Форма", metric:"144 тренировки/год", expected:"К январю: 12 тренировок", progress:"7/12" }
+        ],
+        weekPlan: {
+          range: "Пн–Вс",
+          items: ["3 тренировки", "10 часов deep work", "2 видео", "300 стр чтения"],
+          confirmed: false
+        }
+      },
+      journal: {
+        entries: {
+          "Сегодня": "Пока пусто.",
+          "Вчера": "День был норм. Мало сна, но сделал работу."
+        },
+        insights: {
+          week: [],
+          monthKey: ""
+        }
+      },
+      trackersAdmin: {
+        list: [],
+        builder: {
+          type: null,
+          name: "",
+          difficulty: "medium",
+          xp: 10,
+          days: ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"],
+          goalLink: null,
+          partialAllowed: true,
+          period: "month",
+          target: null,
+          timeRange: "5-60m"
+        }
+      }
+    };
+
+    // Sync trackersAdmin.list with today trackers (for prototype)
+    state.trackersAdmin.list = state.today.trackers.map(t => ({...t, active:true}));
+
+    // ----------------------------
+    // UTIL
+    // ----------------------------
+    function fmtXP(n){ return `+${n} XP`; }
+    function toast(msg){
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(()=> el.classList.remove("show"), 1600);
+    }
+    function setRoutePill(){
+      document.getElementById("routePill").textContent = `route: ${state.route}`;
+    }
+    function pushBack(from){
+      state.back.push(from);
+      if (state.back.length > 50) state.back.shift();
+    }
+    function back(){
+      const prev = state.back.pop();
+      if(prev){ state.route = prev; render(); }
+      else { toast("Назад: истории нет"); }
+    }
+    function nav(to){
+      if (to !== state.route){
+        pushBack(state.route);
+        state.route = to;
+        render();
+      }
+    }
+    function xpAward(amount){
+      state.user.xpInLevel += amount;
+      // simplistic level up
+      while(state.user.xpInLevel >= state.user.xpToNext){
+        state.user.xpInLevel -= state.user.xpToNext;
+        state.user.level += 1;
+        toast(`🎉 Level up! Уровень ${state.user.level}`);
+      }
+    }
+    function scaleXP(value){
+      if (state.user.scaleXpMode === "fixed"){
+        return 5; // example fixed
+      }
+      if (value <= 5) return 0;
+      if (value === 6) return 3;
+      if (value === 7) return 5;
+      if (value === 8) return 8;
+      if (value === 9) return 9;
+      if (value === 10) return 10;
+      return 0;
+    }
+    function missionStatusLabel(){
+      const s = state.today.missionStatus;
+      if (s === "not_set") return "не задана";
+      if (s === "set") return "в процессе";
+      if (s === "done") return "✅ сделано";
+      if (s === "partial") return "↩️ частично";
+      if (s === "fail") return "❌ не сделано";
+      return s;
+    }
+    function dayDoneCount(){
+      const binaries = state.today.trackers.filter(t=>t.type==="binary" && isActiveToday(t));
+      const done = binaries.filter(t=>t.done || t.partial).length;
+      return {done, total:binaries.length};
+    }
+    function isActiveToday(tr){
+      // for prototype: assume all active
+      return true;
+    }
+    function todayPrimaryButtons(){
+      // show first 7 trackers in today
+      return state.today.trackers.slice(0,7);
+    }
+    function todayMoreButtons(){
+      return state.today.trackers.slice(7);
+    }
+
+    // ----------------------------
+    // MODAL
+    // ----------------------------
+    let modalCtx = null;
+    function openModal({title, bodyHtml, onSave}){
+      modalCtx = {onSave};
+      document.getElementById("modalTitle").textContent = title;
+      document.getElementById("modalBody").innerHTML = bodyHtml;
+      document.getElementById("modalBackdrop").style.display = "flex";
+    }
+    function closeModal(){
+      modalCtx = null;
+      document.getElementById("modalBackdrop").style.display = "none";
+    }
+    function modalSave(){
+      if(modalCtx?.onSave) modalCtx.onSave();
+      closeModal();
+      render();
+    }
+
+    // ----------------------------
+    // RENDER HELPERS
+    // ----------------------------
+    function bubble(text, inlineRows=[]){
+      const div = document.createElement("div");
+      div.className = "bubble";
+      div.textContent = text;
+
+      if(inlineRows.length){
+        const k = document.createElement("div");
+        k.className = "inlinekbd";
+        inlineRows.forEach(row => {
+          const r = document.createElement("div");
+          r.className = "inline-row " + (row.cols || "cols2");
+          row.buttons.forEach(b=>{
+            const btn = document.createElement("button");
+            btn.className = "btn " + (b.kind || "");
+            btn.textContent = b.label;
+            btn.onclick = b.onClick;
+            r.appendChild(btn);
+          });
+          k.appendChild(r);
+        });
+        div.appendChild(k);
+      }
+      return div;
+    }
+
+    function renderChat(bubbles){
+      const chat = document.getElementById("chat");
+      chat.innerHTML = "";
+      bubbles.forEach(b => chat.appendChild(b));
+      chat.scrollTop = chat.scrollHeight;
+      setRoutePill();
+    }
+
+    // ----------------------------
+    // SCREENS
+    // ----------------------------
+    function screenToday(){
+      const {done, total} = dayDoneCount();
+      const header =
+`🏠 ${state.today.dateLabel}
+Уровень: ${state.user.level} | XP: ${state.user.xpInLevel}/${state.user.xpToNext}
+🔥 Общий streak: ${state.user.globalStreak} дней
+
+🎯 Миссия дня: ${missionStatusLabel()}
+✅ Трекеры (бинарные): ${done}/${total}
+
+Выбери действие:`;
+
+      const missionRow = (state.today.missionStatus==="not_set")
+        ? [{label:"🎯 Задать миссию", kind:"primary", onClick:()=>nav("mission_new")}]
+        : [
+            {label:"✅ Миссия сделана", kind:"good", onClick:()=>{ state.today.missionStatus="done"; xpAward(20); toast("Миссия: ✅ сделано (+20 XP)"); render(); }},
+            {label:"↩️ Частично", kind:"warn", onClick:()=>{ state.today.missionStatus="partial"; xpAward(10); toast("Миссия: ↩️ частично (+10 XP)"); render(); }},
+            {label:"❌ Не сделал", kind:"bad", onClick:()=>nav("fail_reason")}
+          ];
+
+      const scaleRow = [
+        {label:"⚡ Продуктивность", onClick:()=>nav("scale_productivity")},
+        {label:"🙂 Счастье", onClick:()=>nav("scale_happiness")},
+        {label:"❤️ Любовь к миру", onClick:()=>nav("scale_love")},
+      ];
+
+      const buttons = [];
+      // mission
+      buttons.push({cols:"cols3", buttons: missionRow.length===1 ? [{...missionRow[0]}] : missionRow});
+      // scales
+      buttons.push({cols:"cols3", buttons: scaleRow});
+      // trackers (page 1)
+      const primary = todayPrimaryButtons().map(t=>{
+        if(t.type==="binary"){
+          const label = `${t.done? "✅":"☑️"} ${t.name} · 🔥${t.streak}`;
+          return {label, onClick:()=>toggleBinary(t.id)};
+        }
+        if(t.type==="time"){
+          const unit = t.unit || "";
+          const per = t.period==="month" ? "мес" : t.period==="week" ? "нед" : "день";
+          const label = `⏱ ${t.name} · ${t.progress}/${t.target}${unit} (${per})`;
+          return {label, onClick:()=>openTime(t.id)};
+        }
+        if(t.type==="count"){
+          const unit = t.unit || "";
+          const per = t.period==="month" ? "мес" : t.period==="week" ? "нед" : "день";
+          const label = `🔢 ${t.name} · ${t.progress}/${t.target}${unit} (${per})`;
+          return {label, onClick:()=>openCount(t.id)};
+        }
+        return {label:t.name, onClick:()=>{}};
+      });
+      // render trackers in 2-col rows to mimic telegram inline rows
+      for(let i=0;i<primary.length;i+=2){
+        buttons.push({cols:"cols2", buttons: primary.slice(i,i+2)});
+      }
+
+      // footer
+      buttons.push({cols:"cols3", buttons:[
+        {label:"📝 Заметка дня", onClick:()=>nav("journal_today")},
+        {label:"➕ Ещё", onClick:()=>nav("today_more")},
+        {label:"🌙 Закрыть день", kind:"warn", onClick:()=>nav("checkout")}
+      ]});
+
+      return [bubble(header, buttons)];
+    }
+
+    function screenTodayMore(){
+      const more = todayMoreButtons();
+      const text = `➕ Ещё трекеры на сегодня (${more.length})`;
+      const rows = [];
+      const btns = more.map(t=>{
+        if(t.type==="binary"){
+          const label = `${t.done? "✅":"☑️"} ${t.name} · 🔥${t.streak}`;
+          return {label, onClick:()=>toggleBinary(t.id)};
+        }
+        if(t.type==="time"){
+          const per = t.period==="month" ? "мес" : t.period==="week" ? "нед" : "день";
+          const label = `⏱ ${t.name} · ${t.progress}/${t.target}${t.unit||""} (${per})`;
+          return {label, onClick:()=>openTime(t.id)};
+        }
+        const per = t.period==="month" ? "мес" : t.period==="week" ? "нед" : "день";
+        const label = `🔢 ${t.name} · ${t.progress}/${t.target}${t.unit||""} (${per})`;
+        return {label, onClick:()=>openCount(t.id)};
+      });
+      for(let i=0;i<btns.length;i+=2) rows.push({cols:"cols2", buttons: btns.slice(i,i+2)});
+      rows.push({cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🏠 Сегодня", kind:"primary", onClick:()=>nav("today")}]});
+      return [bubble(text, rows)];
+    }
+
+    function toggleBinary(id){
+      const t = state.today.trackers.find(x=>x.id===id);
+      if(!t) return;
+      // toggle done
+      if(!t.done){
+        t.done = true;
+        t.partial = false;
+        t.streak += 1;
+        xpAward(t.xp || 10);
+        toast(`${t.name}: отмечено ✅ (${fmtXP(t.xp||10)})`);
+      } else {
+        // undo
+        t.done = false;
+        t.partial = false;
+        t.streak = Math.max(0, t.streak-1);
+        toast(`${t.name}: отменено ↩️`);
+      }
+      render();
+    }
+
+    function openTime(id){
+      state._activeTracker = id;
+      nav("time_entry");
+    }
+    function openCount(id){
+      state._activeTracker = id;
+      nav("count_entry");
+    }
+
+    function screenTimeEntry(){
+      const t = state.today.trackers.find(x=>x.id===state._activeTracker);
+      const name = t?.name || "Трекер";
+      const per = t?.period==="month" ? "месяц" : t?.period==="week" ? "неделю" : "день";
+      const text = `⏱ ${name}\nСколько времени добавить сегодня?\nТекущий прогресс за ${per}: ${t.progress}/${t.target}${t.unit||""}`;
+      const add = (v)=>{
+        t.progress += v;
+        toast(`${name}: +${v}${t.unit||""} добавлено`);
+        render();
+      };
+      const rows = [
+        {cols:"cols4", buttons:[
+          {label:"5", onClick:()=>add(5)}, {label:"10", onClick:()=>add(10)}, {label:"20", onClick:()=>add(20)}, {label:"30", onClick:()=>add(30)}
+        ]},
+        {cols:"cols4", buttons:[
+          {label:"45", onClick:()=>add(45)}, {label:"60", onClick:()=>add(60)}, {label:"90", onClick:()=>add(90)}, {label:"120", onClick:()=>add(120)}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"➕ Другое", kind:"primary", onClick:()=>openModal({
+            title:`⏱ ${name}: другое значение`,
+            bodyHtml:`<input id="mNum" type="number" placeholder="Введите число" />`,
+            onSave:()=>{
+              const n = parseInt(document.getElementById("mNum").value||"0",10);
+              if(n>0) add(n);
+            }
+          })},
+          {label:"↩️ Отменить последнее", onClick:()=>{ toast("Прототип: отмена не реализована"); }}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"📅 История", onClick:()=>toast("Прототип: история в v1")},
+          {label:"⚙️ Настройки", onClick:()=>nav("tracker_card_"+t.id)},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenCountEntry(){
+      const t = state.today.trackers.find(x=>x.id===state._activeTracker);
+      const name = t?.name || "Трекер";
+      const per = t?.period==="month" ? "месяц" : t?.period==="week" ? "неделю" : "день";
+      const unit = t?.unit || "";
+      const text = `🔢 ${name}\nСколько добавить сегодня?\nТекущий прогресс за ${per}: ${t.progress}/${t.target}${unit}`;
+      const add = (v)=>{
+        t.progress += v;
+        toast(`${name}: +${v}${unit}`);
+        render();
+      };
+      const rows = [
+        {cols:"cols4", buttons:[
+          {label:"+10", onClick:()=>add(10)}, {label:"+20", onClick:()=>add(20)}, {label:"+30", onClick:()=>add(30)}, {label:"+50", onClick:()=>add(50)}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"✍️ Ввести число", kind:"primary", onClick:()=>openModal({
+            title:`🔢 ${name}: ввести число`,
+            bodyHtml:`<input id="mNum" type="number" placeholder="Введите число" />`,
+            onSave:()=>{
+              const n = parseInt(document.getElementById("mNum").value||"0",10);
+              if(n>0) add(n);
+            }
+          })},
+          {label:"↩️ Отменить последнее", onClick:()=>{ toast("Прототип: отмена не реализована"); }}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"📊 Неделя", onClick:()=>toast("Прототип: графики в mini app")},
+          {label:"📅 Месяц", onClick:()=>toast("Прототип: графики в mini app")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenMissionNew(){
+      const text = `🎯 Миссия дня\nНапиши одну главную миссию дня (1 строка).`;
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✍️ Ввести миссию", kind:"primary", onClick:()=>openModal({
+            title:"🎯 Миссия дня",
+            bodyHtml:`<textarea id="mText" placeholder="Например: смонтировать и выложить ролик"></textarea>`,
+            onSave:()=>{
+              const v = (document.getElementById("mText").value||"").trim();
+              if(v){
+                state.today.missionText = v;
+                state.today.missionStatus = "set";
+                toast("Миссия задана ✅");
+              }
+            }
+          })},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenMissionCard(){
+      const text =
+`🎯 Миссия дня
+${state.today.missionText || "(не задано)"}
+
+Done definition: ${state.today.missionDoneDef || "не задано"}
+Когда делаю: ${state.today.missionWhen || "не задано"}`;
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"✅ Сделана", kind:"good", onClick:()=>{ state.today.missionStatus="done"; xpAward(20); toast("Миссия ✅ (+20 XP)"); render(); }},
+          {label:"↩️ Частично", kind:"warn", onClick:()=>{ state.today.missionStatus="partial"; xpAward(10); toast("Миссия ↩️ (+10 XP)"); render(); }},
+          {label:"❌ Не сделал", kind:"bad", onClick:()=>nav("fail_reason")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"✅ Done definition", onClick:()=>nav("mission_done_def")},
+          {label:"🕒 Когда делаю?", onClick:()=>nav("mission_when")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"✏️ Редактировать", onClick:()=>openModal({
+            title:"✏️ Редактировать миссию",
+            bodyHtml:`<textarea id="mText">${state.today.missionText||""}</textarea>`,
+            onSave:()=>{ state.today.missionText = (document.getElementById("mText").value||"").trim(); toast("Сохранено"); }
+          })},
+          {label:"🗑 Удалить", onClick:()=>{ state.today.missionText=""; state.today.missionStatus="not_set"; toast("Удалено"); render(); }},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenMissionDoneDef(){
+      const text = "✅ Done definition\nКак поймём, что миссия выполнена?";
+      const set = (v)=>{ state.today.missionDoneDef=v; toast("Done definition сохранён"); nav("mission_card"); };
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"Опубликовано/Отправлено", onClick:()=>set("Опубликовано/Отправлено")},
+          {label:"30 минут", onClick:()=>set("30 минут")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"1 результат", onClick:()=>set("1 результат")},
+          {label:"✍️ Другое", kind:"primary", onClick:()=>openModal({
+            title:"Done definition — другое",
+            bodyHtml:`<input id="mText" placeholder="Например: готов черновик из 10 пунктов" />`,
+            onSave:()=>{ const v=(document.getElementById("mText").value||"").trim(); if(v){ state.today.missionDoneDef=v; toast("Сохранено"); nav("mission_card"); } }
+          })}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🎯 К миссии", kind:"primary", onClick:()=>nav("mission_card")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenMissionWhen(){
+      const text = "🕒 Когда ты планируешь делать миссию?";
+      const set = (v)=>{ state.today.missionWhen=v; toast("Время сохранено"); nav("mission_card"); };
+      const rows = [
+        {cols:"cols4", buttons:[
+          {label:"Утро", onClick:()=>set("Утро")},
+          {label:"День", onClick:()=>set("День")},
+          {label:"Вечер", onClick:()=>set("Вечер")},
+          {label:"🕒 Время", kind:"primary", onClick:()=>openModal({
+            title:"Выбрать время",
+            bodyHtml:`<input id="mText" placeholder="Например: 14:00–16:00" />`,
+            onSave:()=>{ const v=(document.getElementById("mText").value||"").trim(); if(v){ set(v); } }
+          })}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🎯 К миссии", kind:"primary", onClick:()=>nav("mission_card")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenFailReason(){
+      const text = "❌ Что мешало больше всего? (причина фиксируется в базе для аналитики)";
+      const choose = (v)=>{ toast(`Причина: ${v}`); nav("fix_suggestion"); };
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"🕒 Время", onClick:()=>choose("Время")},
+          {label:"🪫 Энергия", onClick:()=>choose("Энергия")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"🧠 Неясно что делать", onClick:()=>choose("Неясно")},
+          {label:"🏠 Среда", onClick:()=>choose("Среда")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"🙃 Не хотелось", onClick:()=>choose("Не хотелось")},
+          {label:"✍️ Своя причина", kind:"primary", onClick:()=>openModal({
+            title:"Своя причина",
+            bodyHtml:`<textarea id="mText" placeholder="Напиши коротко"></textarea>`,
+            onSave:()=>{ const v=(document.getElementById("mText").value||"").trim(); if(v){ toast(`Причина: ${v}`); nav("fix_suggestion"); } }
+          })}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🏠 Сегодня", kind:"primary", onClick:()=>nav("today")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenFixSuggestion(){
+      const text = "Ок. Давай сделаем завтра проще. Что меняем?";
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"📉 Упростить план", onClick:()=>{ toast("Ок: упрощаем"); nav("today"); }},
+          {label:"🕒 Сдвинуть время", onClick:()=>{ toast("Ок: сдвигаем"); nav("settings"); }}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"🧩 Минимум-версия на 7 дней", kind:"warn", onClick:()=>{ toast("Ок: минимум-режим включён"); nav("today"); }},
+          {label:"🔄 Пересобрать неделю (ИИ)", kind:"primary", onClick:()=>nav("weekly_plan")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🏠 Сегодня", kind:"primary", onClick:()=>nav("today")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function renderScale(nameKey, pretty){
+      const cur = state.today.scales[nameKey];
+      const text = `🔟 ${pretty}\nОцени за сегодня (1–10). Сейчас: ${cur ?? "—"}`;
+      const mk = (v)=>({label:String(v)+(state.user.scaleXpMode==="by_value" ? (scaleXP(v)>0?` (+${scaleXP(v)}xp)`:""):""), onClick:()=>{ state.today.scales[nameKey]=v; const xp=scaleXP(v); if(xp>0) xpAward(xp); toast(`${pretty}: ${v} ${xp>0?`(+${xp} XP)`:""}`); render(); }});
+      const r1 = [mk(1),mk(2),mk(3),mk(4),mk(5)];
+      const r2 = [mk(6),mk(7),mk(8),mk(9),mk(10)];
+      const rows = [
+        {cols:"cols4", buttons:r1.slice(0,4)},
+        {cols:"cols4", buttons:[r1[4], ...r2.slice(0,3)]},
+        {cols:"cols4", buttons:r2.slice(3)},
+        {cols:"cols3", buttons:[
+          {label:"✏️ Комментарий", kind:"primary", onClick:()=>openModal({
+            title:`Комментарий: ${pretty}`,
+            bodyHtml:`<textarea id="mText" placeholder="1–2 предложения"></textarea>`,
+            onSave:()=>{ toast("Комментарий сохранён (прототип)"); }
+          })},
+          {label:"⚙️ Настройки", onClick:()=>nav("settings_game")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenCheckout(){
+      const {done, total} = dayDoneCount();
+      const text =
+`🌙 Закрываем день?
+Миссия: ${missionStatusLabel()}
+Бинарные трекеры: ${done}/${total}
+
+Что делаем?`;
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✅ День закрыт", kind:"good", onClick:()=>{ state.user.globalStreak += 1; toast("День закрыт ✅ (+streak)"); nav("today"); }},
+          {label:"🎯 Итог миссии", onClick:()=>nav(state.today.missionStatus==="not_set"?"mission_new":"mission_card")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"✅ Невыполненные трекеры", onClick:()=>nav("checkout_missing")},
+          {label:"⚡ Оценки 1–10", onClick:()=>nav("scales_hub")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"📝 Заметка дня", onClick:()=>nav("journal_today")},
+          {label:"❌ Ничего не успел", kind:"bad", onClick:()=>nav("fail_reason")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🏠 Сегодня", kind:"primary", onClick:()=>nav("today")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenCheckoutMissing(){
+      const undone = state.today.trackers.filter(t=>t.type==="binary" && !t.done && !t.partial);
+      const lines = undone.slice(0,10).map(t=>`• ${t.name} (🔥${t.streak})`).join("\n") || "—";
+      const text = `✅ Невыполненные бинарные трекеры:\n${lines}`;
+      const btns = undone.slice(0,6).map(t=>({label:`☑️ ${t.name}`, onClick:()=>toggleBinary(t.id)}));
+      const rows = [];
+      for(let i=0;i<btns.length;i+=2) rows.push({cols:"cols2", buttons:btns.slice(i,i+2)});
+      rows.push({cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🌙 Закрыть день", kind:"warn", onClick:()=>nav("checkout")}]});
+      return [bubble(text, rows)];
+    }
+
+    function screenScalesHub(){
+      const text = "⚡ Оценки 1–10\nВыбери шкалу:";
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"⚡ Продуктивность", onClick:()=>nav("scale_productivity")},
+          {label:"🙂 Счастье", onClick:()=>nav("scale_happiness")},
+          {label:"❤️ Любовь к миру", onClick:()=>nav("scale_love")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🌙 Закрыть день", kind:"warn", onClick:()=>nav("checkout")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    // JOURNAL
+    function screenJournal(){
+      const text = "🗒 Дневник\nЧто понимаем под дневником: заметка дня + анализ ИИ + инсайты.";
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"📝 Заметка сегодня", kind:"primary", onClick:()=>nav("journal_today")},
+          {label:"📅 Выбрать день", onClick:()=>nav("journal_pick")},
+          {label:"🔎 Поиск", onClick:()=>nav("journal_search")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🧠 Анализ недели (ИИ)", kind:"warn", onClick:()=>nav("journal_ai_week")},
+          {label:"💡 Инсайты", onClick:()=>nav("insights")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenJournalToday(){
+      const cur = state.today.journal || "";
+      const text = `📝 Заметка дня\n${cur ? cur : "(пока пусто)"}\n\nХочешь добавить/отредактировать?`;
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label: cur ? "✏️ Редактировать" : "✍️ Добавить", kind:"primary", onClick:()=>openModal({
+            title:"📝 Заметка дня",
+            bodyHtml:`<textarea id="mText" placeholder="Коротко: что было сегодня?">${cur}</textarea>`,
+            onSave:()=>{ state.today.journal = (document.getElementById("mText").value||"").trim(); toast("Заметка сохранена ✅"); }
+          })},
+          {label:"➕ Добавить ещё", onClick:()=>openModal({
+            title:"➕ Добавить к заметке",
+            bodyHtml:`<textarea id="mText" placeholder="Добавь ещё 1–2 предложения"></textarea>`,
+            onSave:()=>{ const add=(document.getElementById("mText").value||"").trim(); if(add){ state.today.journal = (state.today.journal? state.today.journal+"\n":"")+add; toast("Добавлено ✅"); } }
+          })}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"🏷 Теги/темы", onClick:()=>toast("Прототип: автотеги в v1")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenJournalPick(){
+      const text = "📅 Выбрать день (прототип)\n";
+      const days = ["Сегодня","Вчера"];
+      const btns = days.map(d=>({label:d, onClick:()=>{ state._pickedDay=d; nav("journal_day"); }}));
+      const rows = [
+        {cols:"cols2", buttons:btns},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🗒 Дневник", kind:"primary", onClick:()=>nav("journal")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenJournalDay(){
+      const d = state._pickedDay || "Сегодня";
+      const content = (d==="Сегодня") ? (state.today.journal||"(пусто)") : (state.journal.entries[d] || "(пусто)");
+      const text = `🗓 ${d}\n${content}`;
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✏️ Редактировать", kind:"primary", onClick:()=>openModal({
+            title:`✏️ ${d}`,
+            bodyHtml:`<textarea id="mText">${content}</textarea>`,
+            onSave:()=>{
+              const v=(document.getElementById("mText").value||"").trim();
+              if(d==="Сегодня") state.today.journal=v;
+              else state.journal.entries[d]=v;
+              toast("Сохранено ✅");
+            }
+          })},
+          {label:"🗑 Удалить", onClick:()=>{ if(d==="Сегодня") state.today.journal=""; else state.journal.entries[d]=""; toast("Удалено"); render(); }}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🗒 Дневник", kind:"primary", onClick:()=>nav("journal")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenJournalSearch(){
+      const text = "🔎 Поиск по дневнику (прототип)\nВ реальном боте: поиск по ключевым словам по всем дням.";
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✍️ Ввести запрос", kind:"primary", onClick:()=>openModal({
+            title:"Поиск",
+            bodyHtml:`<input id="mText" placeholder="например: сон, тревога, проект X" />`,
+            onSave:()=>{ toast("Прототип: показ результатов"); }
+          })},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenJournalAIWeek(){
+      const text = "🧠 Анализ заметок за неделю (ИИ)\nФормат ОС: ✅ что хорошо / ⚠️ что мешает / 🧪 эксперимент.\n+ возможность зафиксировать инсайты.";
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"📌 Сводка", kind:"primary", onClick:()=>toast("Сводка: прототип")},
+          {label:"🔍 Паттерны", onClick:()=>toast("Паттерны: прототип")},
+          {label:"🔗 С трекерами", onClick:()=>toast("Связь: прототип")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🧪 Эксперимент", kind:"warn", onClick:()=>toast("Эксперимент: 1 рекомендация")},
+          {label:"✍️ Зафиксировать инсайты", kind:"primary", onClick:()=>nav("insight_capture")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenInsights(){
+      const list = (state.journal.insights.week || []).map((x,i)=>`${i+1}. ${x}`).join("\n") || "(пока нет)";
+      const text = `💡 Инсайты\nЗа неделю:\n${list}\n\nХочешь добавить/сделать ключевой?`;
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"➕ Добавить инсайт", kind:"primary", onClick:()=>nav("insight_capture")},
+          {label:"📌 Ключевой инсайт месяца", onClick:()=>nav("insight_month_key")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"🔁 Инсайт → действие", onClick:()=>toast("Прототип: создаём трекер/правило")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenInsightCapture(){
+      const text = "✍️ Зафиксировать инсайты недели\nЗапиши 1–3 инсайта (можно списком).";
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✍️ Ввести", kind:"primary", onClick:()=>openModal({
+            title:"Инсайты недели",
+            bodyHtml:`<textarea id="mText" placeholder="1) ...\n2) ...\n3) ..."></textarea>`,
+            onSave:()=>{
+              const v=(document.getElementById("mText").value||"").trim();
+              if(v){
+                const items = v.split("\n").map(s=>s.replace(/^\s*\d+\)\s*/,"").trim()).filter(Boolean);
+                state.journal.insights.week.push(...items.slice(0,3));
+                toast("Инсайты сохранены ✅");
+              }
+            }
+          })},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"🔁 Превратить в действие", onClick:()=>toast("Прототип: действие создано")},
+          {label:"✅ Готово", kind:"good", onClick:()=>nav("insights")}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenInsightMonthKey(){
+      const text = "📌 Ключевой инсайт месяца\nВыбери или введи вручную.";
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✍️ Ввести вручную", kind:"primary", onClick:()=>openModal({
+            title:"Ключевой инсайт месяца",
+            bodyHtml:`<textarea id="mText" placeholder="Один главный вывод месяца"></textarea>`,
+            onSave:()=>{ state.journal.insights.monthKey=(document.getElementById("mText").value||"").trim(); toast("Сохранено ✅"); }
+          })},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]},
+        {cols:"cols2", buttons:[{label:"💡 К инсайтам", kind:"primary", onClick:()=>nav("insights")},{label:"🏠 Сегодня", onClick:()=>nav("today")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    // GOALS
+    function screenGoals(){
+      const text = "🎯 Цели\nЕсть цели: годовые, месячные, недельные.\nТрекеры просто считают прогресс.";
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"📌 Цели года", kind:"primary", onClick:()=>nav("goals_year")},
+          {label:"📅 Цели месяца", onClick:()=>nav("goals_month")},
+          {label:"📆 Цели недели", onClick:()=>nav("goals_week")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🗺 Дерево целей", onClick:()=>toast("Визуал дерева — позже (mini app)")},
+          {label:"🧠 Декомпозиция (ИИ)", onClick:()=>toast("ИИ: уточняет метрики/вехи")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenGoalsYear(){
+      const list = state.goals.year.map(g=>`• ${g.title} — ${g.metric} (${g.progress})`).join("\n");
+      const text = `📌 Цели года\n${list}\n\nВыбери цель:`;
+      const btns = state.goals.year.map(g=>({label:`🎯 ${g.title}`, kind:"primary", onClick:()=>{ state._goalId=g.id; nav("goal_card"); }}));
+      const rows = [];
+      for(let i=0;i<btns.length;i+=1) rows.push({cols:"cols1", buttons:[btns[i]]});
+      rows.push({cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🎯 Цели", kind:"primary", onClick:()=>nav("goals")}]});
+      return [bubble(text, rows)];
+    }
+
+    function screenGoalCard(){
+      const g = state.goals.year.find(x=>x.id===state._goalId) || state.goals.year[0];
+      const text =
+`🎯 Цель: ${g.title}
+Метрика: ${g.metric}
+Ожидаемо сейчас: ${g.expected}
+Прогресс: ${g.progress}
+
+Что делаем?`;
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"✏️ Редактировать", kind:"primary", onClick:()=>openModal({
+            title:"Редактировать цель",
+            bodyHtml:`<input id="mTitle" value="${g.title.replace(/"/g,'&quot;')}" />
+                     <div style="height:8px"></div>
+                     <input id="mMetric" value="${g.metric.replace(/"/g,'&quot;')}" />`,
+            onSave:()=>{
+              g.title = (document.getElementById("mTitle").value||"").trim();
+              g.metric = (document.getElementById("mMetric").value||"").trim();
+              toast("Сохранено ✅");
+            }
+          })},
+          {label:"📍 Квартальные вехи", onClick:()=>toast("Прототип: Q1..Q4")},
+          {label:"📅 Месячные результаты", onClick:()=>toast("Прототип: expected progress")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🔗 Привязанные трекеры", onClick:()=>toast("Прототип: список связей")},
+          {label:"📊 Прогресс", onClick:()=>toast("Прототип: график")},
+          {label:"🗑 Удалить", kind:"bad", onClick:()=>{ toast("Удалено (прототип)"); nav("goals_year"); }}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"📌 Цели года", kind:"primary", onClick:()=>nav("goals_year")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenGoalsMonth(){
+      const text = "📅 Цели месяца (прототип)\nВ реальном боте: список целей/результатов на месяц, ожидаемый прогресс.";
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"📍 Expected progress", kind:"primary", onClick:()=>nav("monthly_review")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenGoalsWeek(){
+      const wp = state.goals.weekPlan;
+      const list = wp.items.map(x=>`• ${x}`).join("\n");
+      const text = `📆 Цели недели (${wp.range})\n${list}\n\nСтатус: ${wp.confirmed?"✅ подтверждено":"⏳ не подтверждено"}`;
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"🧩 Показать план", kind:"primary", onClick:()=>toast("План показан")},
+          {label:"✅ Принять", kind:"good", onClick:()=>{ wp.confirmed=true; toast("План недели принят ✅"); render(); }},
+          {label:"✏️ Править", onClick:()=>nav("weekly_plan")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🔄 Пересобрать (ИИ)", kind:"warn", onClick:()=>toast("ИИ: пересобрал план (прототип)")},
+          {label:"🎯 Привязать к целям", onClick:()=>toast("Прототип: связи")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenWeeklyPlanEdit(){
+      const wp = state.goals.weekPlan;
+      const text = `✏️ Правка плана недели\nТекущие пункты:\n${wp.items.map((x,i)=>`${i+1}. ${x}`).join("\n")}`;
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"➕ Добавить пункт", kind:"primary", onClick:()=>openModal({
+            title:"Добавить пункт",
+            bodyHtml:`<input id="mText" placeholder="например: 2 видео" />`,
+            onSave:()=>{
+              const v=(document.getElementById("mText").value||"").trim();
+              if(v){ wp.items.push(v); toast("Добавлено ✅"); }
+            }
+          })},
+          {label:"➖ Убрать пункт", onClick:()=>openModal({
+            title:"Убрать пункт (номер)",
+            bodyHtml:`<input id="mNum" type="number" placeholder="например: 2" />`,
+            onSave:()=>{
+              const n=parseInt(document.getElementById("mNum").value||"0",10);
+              if(n>0 && n<=wp.items.length){ wp.items.splice(n-1,1); toast("Удалено ✅"); }
+            }
+          })}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"✅ Сохранить", kind:"good", onClick:()=>{ toast("Сохранено ✅"); nav("goals_week"); }},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    // TRACKERS ADMIN
+    function screenTrackers(){
+      const text = "✅ Трекеры\nСоздание/редактирование/порядок/расписание/привязка к целям.";
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"➕ Добавить", kind:"primary", onClick:()=>nav("tracker_add_type")},
+          {label:"📋 Список", onClick:()=>nav("tracker_list")},
+          {label:"↕️ Порядок", onClick:()=>nav("tracker_order")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🗓 Расписание", onClick:()=>toast("Прототип: в карточке трекера")},
+          {label:"🔗 К целям", onClick:()=>toast("Прототип: в карточке трекера")},
+          {label:"🗄 Архив", onClick:()=>toast("Прототип: архив")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🏠 Сегодня", kind:"primary", onClick:()=>nav("today")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenTrackerAddType(){
+      const text = "➕ Добавить трекер\nВыбери тип:";
+      const setType = (t)=>{ state.trackersAdmin.builder.type=t; nav("tracker_add_name"); };
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✅ Бинарный", kind:"primary", onClick:()=>setType("binary")},
+          {label:"🔟 Шкала 1–10", onClick:()=>setType("scale")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"⏱ Время", onClick:()=>setType("time")},
+          {label:"🔢 Количество", onClick:()=>setType("count")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"✅ Трекеры", kind:"primary", onClick:()=>nav("trackers")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenTrackerAddName(){
+      const text = "Название трекера?";
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✍️ Ввести имя", kind:"primary", onClick:()=>openModal({
+            title:"Название трекера",
+            bodyHtml:`<input id="mText" placeholder="например: Вода / Чтение / Работа" />`,
+            onSave:()=>{
+              const v=(document.getElementById("mText").value||"").trim();
+              if(v){ state.trackersAdmin.builder.name=v; nav("tracker_add_settings"); }
+            }
+          })},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenTrackerAddSettings(){
+      const b = state.trackersAdmin.builder;
+      const text =
+`Настройки трекера:
+Тип: ${b.type}
+Имя: ${b.name}
+Сложность: ${b.difficulty} (XP=${b.xp})
+Дни: ${b.days.join(", ")}
+Частичное: ${b.partialAllowed ? "вкл" : "выкл"}
+${(b.type==="time"||b.type==="count") ? `Период: ${b.period} | Цель: ${b.target ?? "не задана"}` : ""}`;
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"🎚 Сложность/XP", kind:"primary", onClick:()=>nav("tracker_add_difficulty")},
+          {label:"🗓 Дни недели", onClick:()=>nav("tracker_add_days")},
+          {label:"🎯 К цели", onClick:()=>toast("Прототип: привязка")}
+        ]},
+        ...(b.type==="scale" ? [{
+          cols:"cols2", buttons:[
+            {label:"⚙️ XP правило", onClick:()=>nav("settings_game")},
+            {label:"🧩 Частично", onClick:()=>{ toast("Для шкал не нужно"); }}
+          ]
+        }] : []),
+        ...((b.type==="time"||b.type==="count") ? [{
+          cols:"cols3", buttons:[
+            {label:"📆 Период", onClick:()=>nav("tracker_add_period")},
+            {label:"🎯 Цель", onClick:()=>nav("tracker_add_target")},
+            {label:"⏲ Диапазон", onClick:()=> b.type==="time" ? nav("tracker_add_timerange") : toast("Только для времени")}
+          ]
+        }] : [{
+          cols:"cols2", buttons:[
+            {label:"🧩 Частичное/минимум", onClick:()=>{ b.partialAllowed=!b.partialAllowed; toast("Переключено"); render(); }},
+            {label:"⬅️ Назад", onClick:()=>back()}
+          ]
+        }]),
+        {cols:"cols2", buttons:[
+          {label:"✅ Создать", kind:"good", onClick:()=>createTrackerFromBuilder()},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenTrackerAddDifficulty(){
+      const b = state.trackersAdmin.builder;
+      const set = (d,x)=>{ b.difficulty=d; b.xp=x; toast(`Сложность: ${d} (XP=${x})`); back(); };
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"Лёгкая (+5)", onClick:()=>set("easy",5)},
+          {label:"Средняя (+10)", kind:"primary", onClick:()=>set("medium",10)}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"Сложная (+15)", onClick:()=>set("hard",15)},
+          {label:"Сверх (+25)", onClick:()=>set("insane",25)}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"✏️ Свой XP", kind:"primary", onClick:()=>openModal({
+            title:"Свой XP",
+            bodyHtml:`<input id="mNum" type="number" placeholder="например: 12" />`,
+            onSave:()=>{
+              const n=parseInt(document.getElementById("mNum").value||"0",10);
+              if(n>0){ b.difficulty="custom"; b.xp=n; toast("XP сохранён"); }
+            }
+          })},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble("🎚 Сложность / XP", rows)];
+    }
+
+    function screenTrackerAddDays(){
+      const b = state.trackersAdmin.builder;
+      const days = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+      const toggle = (d)=>{
+        const idx=b.days.indexOf(d);
+        if(idx>=0) b.days.splice(idx,1); else b.days.push(d);
+        toast("Обновлено");
+        render();
+      };
+      const btns = days.map(d=>({label:(b.days.includes(d)?"✅ ":"☑️ ")+d, onClick:()=>toggle(d)}));
+      const rows = [
+        {cols:"cols4", buttons:btns.slice(0,4)},
+        {cols:"cols3", buttons:btns.slice(4)},
+        {cols:"cols2", buttons:[{label:"✅ Готово", kind:"good", onClick:()=>back()},{label:"⬅️ Назад", onClick:()=>back()}]}
+      ];
+      return [bubble("🗓 Дни недели (нажми, чтобы включить/выключить)", rows)];
+    }
+
+    function screenTrackerAddPeriod(){
+      const b = state.trackersAdmin.builder;
+      const set = (p)=>{ b.period=p; toast(`Период: ${p}`); back(); };
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"День", onClick:()=>set("day")},
+          {label:"Неделя", kind:"primary", onClick:()=>set("week")},
+          {label:"Месяц", onClick:()=>set("month")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"✅ Ок", kind:"good", onClick:()=>back()}]}
+      ];
+      return [bubble("📆 Период агрегации", rows)];
+    }
+
+    function screenTrackerAddTarget(){
+      const b = state.trackersAdmin.builder;
+      const text = "🎯 Цель на период (например 120 часов в месяц / 300 страниц в неделю)";
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✍️ Ввести", kind:"primary", onClick:()=>openModal({
+            title:"Цель на период",
+            bodyHtml:`<input id="mNum" type="number" placeholder="например: 120" />`,
+            onSave:()=>{ const n=parseInt(document.getElementById("mNum").value||"0",10); if(n>0){ b.target=n; toast("Цель сохранена"); } }
+          })},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenTrackerAddTimeRange(){
+      const b = state.trackersAdmin.builder;
+      const set = (r)=>{ b.timeRange=r; toast(`Диапазон: ${r}`); back(); };
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"5–60 минут", kind:"primary", onClick:()=>set("5-60m")},
+          {label:"1–24 часа", onClick:()=>set("1-24h")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"✅ Ок", kind:"good", onClick:()=>back()}]}
+      ];
+      return [bubble("⏲ Диапазон времени", rows)];
+    }
+
+    function createTrackerFromBuilder(){
+      const b = state.trackersAdmin.builder;
+      if(!b.type || !b.name){ toast("Нужно выбрать тип и имя"); return; }
+      // Create tracker object for today list
+      let tr;
+      if(b.type==="binary"){
+        tr = { id:"t_"+Math.random().toString(16).slice(2,8), type:"binary", name:b.name, streak:0, xp:b.xp, done:false, partial:false };
+      } else if(b.type==="scale"){
+        tr = { id:"t_"+Math.random().toString(16).slice(2,8), type:"scale", name:b.name, streak:0, xp:0, done:false, partial:false };
+      } else if(b.type==="time"){
+        tr = { id:"t_"+Math.random().toString(16).slice(2,8), type:"time", name:b.name, period:b.period, progress:0, target:b.target||0, unit:(b.timeRange==="1-24h"?"ч":"м"), xpPer:0 };
+      } else {
+        tr = { id:"t_"+Math.random().toString(16).slice(2,8), type:"count", name:b.name, period:b.period, progress:0, target:b.target||0, unit:"", xpPer:0 };
+      }
+      state.today.trackers.push(tr);
+      state.trackersAdmin.list.push({...tr, active:true});
+      toast("Трекер создан ✅");
+      nav("tracker_list");
+    }
+
+    function screenTrackerList(){
+      const text = "📋 Список трекеров (выбери для редактирования)";
+      const btns = state.trackersAdmin.list.slice(0,12).map(t=>({label:`${iconFor(t)} ${t.name}`, kind:"primary", onClick:()=>nav("tracker_card_"+t.id)}));
+      const rows = [];
+      btns.forEach(b=>rows.push({cols:"cols1", buttons:[b]}));
+      rows.push({cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"➕ Добавить", kind:"good", onClick:()=>nav("tracker_add_type")}]});
+      return [bubble(text, rows)];
+    }
+
+    function iconFor(t){
+      if(t.type==="binary") return "✅";
+      if(t.type==="scale") return "🔟";
+      if(t.type==="time") return "⏱";
+      if(t.type==="count") return "🔢";
+      return "•";
+    }
+
+    function screenTrackerCard(id){
+      const t = state.trackersAdmin.list.find(x=>x.id===id) || state.today.trackers.find(x=>x.id===id);
+      if(!t) return [bubble("Трекер не найден", [{cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"✅ Трекеры", onClick:()=>nav("trackers")}]}])];
+      const text =
+`⚙️ Трекер: ${t.name}
+Тип: ${t.type}
+Streak: 🔥${t.streak ?? 0}
+${t.type==="binary" ? `XP за выполнение: ${t.xp ?? 10}` : ""}
+${(t.type==="time"||t.type==="count") ? `Период: ${t.period} | Цель: ${t.target}` : ""}
+
+Что редактируем?`;
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"✏️ Имя", kind:"primary", onClick:()=>openModal({
+            title:"Имя трекера",
+            bodyHtml:`<input id="mText" value="${(t.name||"").replace(/"/g,'&quot;')}" />`,
+            onSave:()=>{ t.name=(document.getElementById("mText").value||"").trim(); toast("Сохранено"); }
+          })},
+          {label:"🎚 XP/сложность", onClick:()=>toast("Прототип: редактирование XP")},
+          {label:"🗓 Расписание", onClick:()=>toast("Прототип: дни недели")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🎯 Цель/период", onClick:()=>toast("Прототип: период/цель")},
+          {label:"🔗 К цели", onClick:()=>toast("Прототип: привязка")},
+          {label:"📊 Статистика", onClick:()=>toast("Прототип: графики")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🗄 Архив", onClick:()=>toast("Архивировано (прототип)")},
+          {label:"🗑 Удалить", kind:"bad", onClick:()=>{ toast("Удалено (прототип)"); }},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenTrackerOrder(){
+      const text = "↕️ Порядок на Сегодня (прототип)\nВ реальном боте: список + ⬆️⬇️ для каждого.";
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✅ Сохранить", kind:"good", onClick:()=>toast("Сохранено ✅")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    // SUMMARIES
+    function screenSummaries(){
+      const text = "📊 Итоги\nДоступно: день/неделя/месяц/квартал/год + ОС ИИ.";
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"🌙 Итог дня", onClick:()=>toast("Итог дня: прототип")},
+          {label:"📆 Итог недели", kind:"primary", onClick:()=>nav("weekly_review")},
+          {label:"📅 Итог месяца", kind:"warn", onClick:()=>nav("monthly_review")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🧭 Итог квартала", onClick:()=>toast("Квартал: прототип")},
+          {label:"🏁 Итог года", onClick:()=>toast("Год: прототип")},
+          {label:"🧠 ОС от ИИ", onClick:()=>toast("ОС: прототип")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"🏠 Сегодня", kind:"primary", onClick:()=>nav("today")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenWeeklyReview(){
+      const wp = state.goals.weekPlan;
+      const text =
+`📆 Итог недели
+План vs факт (пример):
+• Тренировки: 3 / 2
+• Часы работы: 28 / 40
+• Чтение: 210 / 300
+
+Хочешь ОС от ИИ и план на следующую неделю?`;
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"✅ План vs факт", kind:"primary", onClick:()=>toast("План vs факт: детали")},
+          {label:"🎯 По целям", onClick:()=>toast("По целям: детали")},
+          {label:"📈 По трекерам", onClick:()=>toast("По трекерам: детали")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🧠 Анализ дневника (ИИ)", kind:"warn", onClick:()=>nav("journal_ai_week")},
+          {label:"💡 Инсайты недели", onClick:()=>nav("insights")},
+          {label:"🧩 План след. недели", kind:"primary", onClick:()=>nav("goals_week")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"✅ Принять план", kind:"good", onClick:()=>{ wp.confirmed=true; xpAward(15); toast("План принят ✅ (+15 XP)"); }},
+          {label:"✏️ Править", onClick:()=>nav("weekly_plan")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"📊 Итоги", kind:"primary", onClick:()=>nav("summaries")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenMonthlyReview(){
+      const text =
+`📅 Итог месяца + Expected progress
+Бот присылает:
+1) Твои цели года
+2) Ожидаемый результат “на сейчас”
+3) Факт
+4) ОС от ИИ + подбадривание
+5) Итог месяца (текст) → XP`;
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"📌 Цели года", kind:"primary", onClick:()=>nav("goals_year")},
+          {label:"📍 Expected progress", onClick:()=>toast("Expected: прототип")},
+          {label:"📊 Факт", onClick:()=>toast("Факт: прототип")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🧠 ОС от ИИ", kind:"warn", onClick:()=>toast("ОС: дружелюбно, коротко")},
+          {label:"📝 Итог текстом", kind:"primary", onClick:()=>openModal({
+            title:"Итог месяца (текст)",
+            bodyHtml:`<textarea id="mText" placeholder="Коротко: что получилось? что не получилось? почему?"></textarea>`,
+            onSave:()=>{ xpAward(20); toast("Итог сохранён (+20 XP)"); }
+          })},
+          {label:"💡 Инсайт месяца", onClick:()=>nav("insight_month_key")}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"📊 Итоги", kind:"primary", onClick:()=>nav("summaries")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    // PROFILE
+    function screenProfile(){
+      const text =
+`👤 Профиль
+Уровень: ${state.user.level}
+XP: ${state.user.xpInLevel}/${state.user.xpToNext}
+🔥 Общий streak: ${state.user.globalStreak}
+
+(Аватар: позже)
+Что открыть?`;
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"🧬 Уровень/XP", kind:"primary", onClick:()=>toast("XP: прогресс")},
+          {label:"🔥 Streak’и", onClick:()=>toast("Streak: общий + по трекерам")},
+          {label:"🏅 Достижения", onClick:()=>toast("Достижения: прототип")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"🧑‍🎨 Аватар", onClick:()=>toast("Аватар: позже")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    // SETTINGS
+    function screenSettings(){
+      const u = state.user;
+      const text =
+`⚙️ Настройки
+🕒 Часовой пояс: ${u.tz}
+☀️ Утренний чек-ин: ${u.morningTime}
+🌙 Вечерний чек-аут: ${u.eveningTime}
+🔕 Тихие часы: ${u.quiet}
+
+Что меняем?`;
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"🕒 Часовой пояс", kind:"primary", onClick:()=>openModal({
+            title:"Часовой пояс",
+            bodyHtml:`<input id="mText" value="${u.tz}" />`,
+            onSave:()=>{ u.tz=(document.getElementById("mText").value||"").trim(); toast("Сохранено"); }
+          })},
+          {label:"☀️ Утро", onClick:()=>openModal({
+            title:"Утренний чек-ин",
+            bodyHtml:`<input id="mText" value="${u.morningTime}" placeholder="09:00" />`,
+            onSave:()=>{ u.morningTime=(document.getElementById("mText").value||"").trim(); toast("Сохранено"); }
+          })},
+          {label:"🌙 Вечер", onClick:()=>openModal({
+            title:"Вечерний чек-аут",
+            bodyHtml:`<input id="mText" value="${u.eveningTime}" placeholder="21:30" />`,
+            onSave:()=>{ u.eveningTime=(document.getElementById("mText").value||"").trim(); toast("Сохранено"); }
+          })}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🔕 Тихие часы", onClick:()=>openModal({
+            title:"Тихие часы",
+            bodyHtml:`<input id="mText" value="${u.quiet}" placeholder="23:30–08:30" />`,
+            onSave:()=>{ u.quiet=(document.getElementById("mText").value||"").trim(); toast("Сохранено"); }
+          })},
+          {label:"🎛 Геймификация", kind:"warn", onClick:()=>nav("settings_game")},
+          {label:"🧠 Промпт ОС", onClick:()=>nav("settings_prompt")}
+        ]},
+        {cols:"cols3", buttons:[
+          {label:"🔗 WHOOP", onClick:()=>toast("Интеграции: позже")},
+          {label:"🔐 Приватность", onClick:()=>toast("Приватность: позже")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenSettingsGame(){
+      const u = state.user;
+      const text =
+`🎛 Геймификация
+Scale XP: ${u.scaleXpMode === "by_value" ? "по значению (1–10)" : "фикс за отметку"}
+
+(позже: freeze streak)`;
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"🔟 По значению", kind:u.scaleXpMode==="by_value"?"primary":"", onClick:()=>{ u.scaleXpMode="by_value"; toast("Ок"); render(); }},
+          {label:"📌 Фикс", kind:u.scaleXpMode==="fixed"?"primary":"", onClick:()=>{ u.scaleXpMode="fixed"; toast("Ок"); render(); }}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"⚙️ Настройки", kind:"primary", onClick:()=>nav("settings")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenSettingsPrompt(){
+      const u = state.user;
+      const text =
+`🧠 Промпт “подбадривателя”
+Текущий промпт:
+"${u.encouragementPrompt}"`;
+      const rows = [
+        {cols:"cols2", buttons:[
+          {label:"✏️ Изменить", kind:"primary", onClick:()=>openModal({
+            title:"Изменить промпт",
+            bodyHtml:`<textarea id="mText">${u.encouragementPrompt}</textarea>`,
+            onSave:()=>{ u.encouragementPrompt=(document.getElementById("mText").value||"").trim(); toast("Сохранено"); }
+          })},
+          {label:"↩️ Сбросить", onClick:()=>{ u.encouragementPrompt="Подбадривай меня дружелюбно, коротко и по делу."; toast("Сброшено"); render(); }}
+        ]},
+        {cols:"cols2", buttons:[{label:"⬅️ Назад", onClick:()=>back()},{label:"⚙️ Настройки", kind:"primary", onClick:()=>nav("settings")}]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    // EXPORT
+    function screenExport(){
+      const text = "📦 Экспорт\nВыгрузка по дням (.txt/.md) или структурировано (CSV/JSON).";
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"📄 По дням", kind:"primary", onClick:()=>toast("Экспорт .md/.txt (прототип)")},
+          {label:"🧾 Архив всего", onClick:()=>toast("ZIP (прототип)")},
+          {label:"📊 CSV/JSON", onClick:()=>toast("CSV/JSON (прототип)")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"📅 Выбрать период", kind:"warn", onClick:()=>nav("export_range")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    function screenExportRange(){
+      const text = "📅 Выбрать период";
+      const rows = [
+        {cols:"cols3", buttons:[
+          {label:"7 дней", onClick:()=>toast("Ок: 7 дней")},
+          {label:"30 дней", onClick:()=>toast("Ок: 30 дней")},
+          {label:"Этот месяц", kind:"primary", onClick:()=>toast("Ок: этот месяц")}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"Прошлый месяц", onClick:()=>toast("Ок: прошлый месяц")},
+          {label:"✍️ Диапазон", kind:"primary", onClick:()=>openModal({
+            title:"Диапазон",
+            bodyHtml:`<input id="mText" placeholder="YYYY-MM-DD..YYYY-MM-DD" />`,
+            onSave:()=>toast("Ок: диапазон (прототип)")
+          })}
+        ]},
+        {cols:"cols2", buttons:[
+          {label:"✅ Сгенерировать", kind:"good", onClick:()=>toast("Файл создан (прототип)")},
+          {label:"⬅️ Назад", onClick:()=>back()}
+        ]}
+      ];
+      return [bubble(text, rows)];
+    }
+
+    // Router
+    function render(){
+      state.route = state.route || "today";
+      let bubbles = [];
+      if(state.route === "today") bubbles = screenToday();
+      else if(state.route === "today_more") bubbles = screenTodayMore();
+      else if(state.route === "mission_new") bubbles = screenMissionNew();
+      else if(state.route === "mission_card") bubbles = screenMissionCard();
+      else if(state.route === "mission_done_def") bubbles = screenMissionDoneDef();
+      else if(state.route === "mission_when") bubbles = screenMissionWhen();
+      else if(state.route === "fail_reason") bubbles = screenFailReason();
+      else if(state.route === "fix_suggestion") bubbles = screenFixSuggestion();
+      else if(state.route === "scale_productivity") bubbles = renderScale("productivity","Продуктивность");
+      else if(state.route === "scale_happiness") bubbles = renderScale("happiness","Счастье");
+      else if(state.route === "scale_love") bubbles = renderScale("love","Любовь к миру");
+      else if(state.route === "checkout") bubbles = screenCheckout();
+      else if(state.route === "checkout_missing") bubbles = screenCheckoutMissing();
+      else if(state.route === "scales_hub") bubbles = screenScalesHub();
+      else if(state.route === "time_entry") bubbles = screenTimeEntry();
+      else if(state.route === "count_entry") bubbles = screenCountEntry();
+
+      else if(state.route === "journal") bubbles = screenJournal();
+      else if(state.route === "journal_today") bubbles = screenJournalToday();
+      else if(state.route === "journal_pick") bubbles = screenJournalPick();
+      else if(state.route === "journal_day") bubbles = screenJournalDay();
+      else if(state.route === "journal_search") bubbles = screenJournalSearch();
+      else if(state.route === "journal_ai_week") bubbles = screenJournalAIWeek();
+      else if(state.route === "insights") bubbles = screenInsights();
+      else if(state.route === "insight_capture") bubbles = screenInsightCapture();
+      else if(state.route === "insight_month_key") bubbles = screenInsightMonthKey();
+
+      else if(state.route === "goals") bubbles = screenGoals();
+      else if(state.route === "goals_year") bubbles = screenGoalsYear();
+      else if(state.route === "goal_card") bubbles = screenGoalCard();
+      else if(state.route === "goals_month") bubbles = screenGoalsMonth();
+      else if(state.route === "goals_week") bubbles = screenGoalsWeek();
+      else if(state.route === "weekly_plan") bubbles = screenWeeklyPlanEdit();
+
+      else if(state.route === "trackers") bubbles = screenTrackers();
+      else if(state.route === "tracker_add_type") bubbles = screenTrackerAddType();
+      else if(state.route === "tracker_add_name") bubbles = screenTrackerAddName();
+      else if(state.route === "tracker_add_settings") bubbles = screenTrackerAddSettings();
+      else if(state.route === "tracker_add_difficulty") bubbles = screenTrackerAddDifficulty();
+      else if(state.route === "tracker_add_days") bubbles = screenTrackerAddDays();
+      else if(state.route === "tracker_add_period") bubbles = screenTrackerAddPeriod();
+      else if(state.route === "tracker_add_target") bubbles = screenTrackerAddTarget();
+      else if(state.route === "tracker_add_timerange") bubbles = screenTrackerAddTimeRange();
+      else if(state.route === "tracker_list") bubbles = screenTrackerList();
+      else if(state.route.startsWith("tracker_card_")) bubbles = screenTrackerCard(state.route.replace("tracker_card_",""));
+      else if(state.route === "tracker_order") bubbles = screenTrackerOrder();
+
+      else if(state.route === "summaries") bubbles = screenSummaries();
+      else if(state.route === "weekly_review") bubbles = screenWeeklyReview();
+      else if(state.route === "monthly_review") bubbles = screenMonthlyReview();
+
+      else if(state.route === "profile") bubbles = screenProfile();
+
+      else if(state.route === "settings") bubbles = screenSettings();
+      else if(state.route === "settings_game") bubbles = screenSettingsGame();
+      else if(state.route === "settings_prompt") bubbles = screenSettingsPrompt();
+
+      else if(state.route === "export") bubbles = screenExport();
+      else if(state.route === "export_range") bubbles = screenExportRange();
+
+      else bubbles = [bubble("Экран не найден. Вернуться на Сегодня?", [{cols:"cols2", buttons:[{label:"🏠 Сегодня", kind:"primary", onClick:()=>nav("today")},{label:"⬅️ Назад", onClick:()=>back()}]}])];
+
+      renderChat(bubbles);
+    }
+
+    // clock
+    function tick(){
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2,'0');
+      const mm = String(now.getMinutes()).padStart(2,'0');
+      document.getElementById("clock").textContent = `${hh}:${mm}`;
+    }
+    setInterval(tick, 1000);
+    tick();
+
+    // initial render
+    render();
+
+    // Expose back on ESC
+    document.addEventListener("keydown",(e)=>{
+      if(e.key==="Escape"){
+        const mb = document.getElementById("modalBackdrop");
+        if(mb.style.display==="flex") closeModal();
+        else back();
+      }
+    });
+  </script>
+</body>
+</html>

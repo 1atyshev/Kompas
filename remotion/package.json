@@ -1,0 +1,23 @@
+{
+  "name": "habitbot-remotion",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "remotion studio",
+    "render": "remotion render",
+    "still": "remotion still"
+  },
+  "dependencies": {
+    "@iconify/react": "^5.0.2",
+    "@remotion/google-fonts": "^4.0.227",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "^4.0.227"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.4.0"
+  }
+}

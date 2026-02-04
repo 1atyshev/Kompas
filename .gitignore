@@ -1,0 +1,28 @@
+# Secrets / local config
+.env
+.env.*
+AGENTS.md
+must-*.json
+
+# Local data/artifacts
+bot.db
+bot.log
+*.db
+*.sqlite
+*.log
+habitbot.tar.gz
+.tmp_habitbot/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+remotion/node_modules/
+remotion/out/
+
+# OS
+.DS_Store
