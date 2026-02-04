@@ -2596,7 +2596,7 @@ def mission_inline(status: str) -> InlineKeyboardMarkup:
     buttons = []
     if status == "not_set":
         buttons.append(
-            [InlineKeyboardButton(text="🎯 Задать миссию", callback_data="mission:set")]
+            [InlineKeyboardButton(text="🎯 Задать цель дня", callback_data="mission:set")]
         )
     else:
         buttons.append(
@@ -2646,11 +2646,12 @@ def tracker_inline(tracker: Tracker, date: dt.date) -> InlineKeyboardMarkup:
             ]
         )
     elif tracker.type == "time":
+        unit = tracker.unit or ""
         buttons.append(
             [
-                InlineKeyboardButton(text="+1", callback_data=f"tracker:add:{tracker.id}:1"),
-                InlineKeyboardButton(text="+5", callback_data=f"tracker:add:{tracker.id}:5"),
-                InlineKeyboardButton(text="+10", callback_data=f"tracker:add:{tracker.id}:10"),
+                InlineKeyboardButton(text=f"+1{unit}", callback_data=f"tracker:add:{tracker.id}:1"),
+                InlineKeyboardButton(text=f"+5{unit}", callback_data=f"tracker:add:{tracker.id}:5"),
+                InlineKeyboardButton(text=f"+10{unit}", callback_data=f"tracker:add:{tracker.id}:10"),
             ]
         )
         buttons.append(
@@ -2781,6 +2782,20 @@ def tracker_edit_type_inline(tracker_id: int, current_type: str) -> InlineKeyboa
         [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"tracker:edit:{tracker_id}")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def tracker_create_xp_inline(per_hour: bool = False) -> InlineKeyboardMarkup:
+    suffix = "/час" if per_hour else ""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=f"2 XP{suffix}", callback_data="create:xp:2"),
+                InlineKeyboardButton(text=f"5 XP{suffix}", callback_data="create:xp:5"),
+                InlineKeyboardButton(text=f"10 XP{suffix}", callback_data="create:xp:10"),
+            ],
+            [InlineKeyboardButton(text="✏️ Свое", callback_data="create:xp_custom")],
+        ]
+    )
 
 
 def tracker_streak_inline(tracker: Tracker) -> InlineKeyboardMarkup:
@@ -3140,7 +3155,11 @@ def tracker_input_prompt(tracker: Tracker, date: dt.date) -> tuple[str, InlineKe
 
     # time / count
     unit = tracker.unit or ""
-    text = f"{name}: добавить значение. Прогресс: {int(total)}/{tracker.target}{unit}"
+    if tracker.target and tracker.target > 0:
+        progress = f"{int(total)}/{tracker.target}{unit}"
+    else:
+        progress = f"{format_value(total)}{unit or ''}"
+    text = f"{name}: добавить значение. Сейчас: {progress}"
     if tracker.type == "count":
         buttons = count_value_buttons(tracker)
         buttons.append(
@@ -3149,9 +3168,9 @@ def tracker_input_prompt(tracker: Tracker, date: dt.date) -> tuple[str, InlineKe
     else:
         buttons = [
             [
-                InlineKeyboardButton(text="+1", callback_data=f"tracker:add:{tracker.id}:1"),
-                InlineKeyboardButton(text="+5", callback_data=f"tracker:add:{tracker.id}:5"),
-                InlineKeyboardButton(text="+10", callback_data=f"tracker:add:{tracker.id}:10"),
+                InlineKeyboardButton(text=f"+1{unit}", callback_data=f"tracker:add:{tracker.id}:1"),
+                InlineKeyboardButton(text=f"+5{unit}", callback_data=f"tracker:add:{tracker.id}:5"),
+                InlineKeyboardButton(text=f"+10{unit}", callback_data=f"tracker:add:{tracker.id}:10"),
             ],
             [InlineKeyboardButton(text="✍️ Ввести число", callback_data=f"tracker:custom:{tracker.id}")],
         ]
@@ -3293,6 +3312,7 @@ class JournalStates(StatesGroup):
 
 class SettingsStates(StatesGroup):
     timezone = State()
+    timezone_confirm = State()
     morning_time = State()
     evening_time = State()
     coach_prompt = State()
@@ -3306,6 +3326,11 @@ class CheckinStates(StatesGroup):
 
 class CoachStates(StatesGroup):
     chat = State()
+
+class OnboardingStates(StatesGroup):
+    custom_tracker_name = State()
+    custom_tracker_xp = State()
+    goal_custom_value = State()
 
 
 # ----------------------------
@@ -3349,7 +3374,10 @@ def _tracker_button_label(tracker: Tracker, date: dt.date) -> tuple[str, bool]:
             text = f"{marker} {tracker.name} (XP {tracker.xp})"
         elif tracker.type in {"time", "count"}:
             unit = tracker.unit or ""
-            text = f"{tracker.name}: {int(total)}/{tracker.target}{unit}"
+            if tracker.target and tracker.target > 0:
+                text = f"{tracker.name}: {int(total)}/{tracker.target}{unit}"
+            else:
+                text = f"{tracker.name}: {format_value(total)}{unit}"
         else:
             text = f"{tracker.name}: {total or '—'}/10"
     text = f"{text}{tracker_streak_suffix(tracker, date)}"
@@ -3376,13 +3404,13 @@ def render_today_view(user_tg_id: int) -> tuple[str, InlineKeyboardMarkup]:
         f"🏠 Сегодня",
         f"Уровень {user_row.level}, XP {user_row.xp}/{xp_needed(user_row.level)}",
         f"🔥 Streak: {user_row.streak}",
-        f"🎯 Миссия: {mission_text} | {status_label}",
+        f"🎯 Главная цель дня: {mission_text} | {status_label}",
     ]
 
     kb_rows: list[list[InlineKeyboardButton]] = []
     # Миссия
     if mission.status == "not_set":
-        kb_rows.append([InlineKeyboardButton(text="🎯 Задать миссию", callback_data="mission:set")])
+        kb_rows.append([InlineKeyboardButton(text="🎯 Задать цель дня", callback_data="mission:set")])
     elif mission.status == "set":
         kb_rows.append(
             [
@@ -3452,6 +3480,184 @@ def onboarding_finish_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="В меню", callback_data="onboarding:finish")]
+        ]
+    )
+
+
+def onboarding_start_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Быстрый старт (1 мин)", callback_data="onboarding:mode:fast")],
+            [InlineKeyboardButton(text="🎬 Посмотреть как работает (видео)", callback_data="onboarding:mode:video")],
+            [InlineKeyboardButton(text="⏭ Пропустить онбординг", callback_data="onboarding:skip")],
+        ]
+    )
+
+
+def onboarding_video_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➡️ Продолжить быстрый старт", callback_data="onboarding:mode:fast")],
+            [InlineKeyboardButton(text="⏭ Пропустить онбординг", callback_data="onboarding:skip")],
+        ]
+    )
+
+
+def onboarding_tz_confirm_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Да", callback_data="onboarding:tz_confirm:yes"),
+                InlineKeyboardButton(text="✏️ Исправить", callback_data="onboarding:tz_confirm:no"),
+            ]
+        ]
+    )
+
+
+def onboarding_reminders_choice_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Включить", callback_data="onboarding:reminders:on"),
+                InlineKeyboardButton(text="⏭ Пропустить", callback_data="onboarding:reminders:off"),
+            ]
+        ]
+    )
+
+
+def onboarding_skip_time_kb(kind: str) -> InlineKeyboardMarkup:
+    if kind == "morning":
+        label = "⏭ Пропустить утро"
+        cb = "onboarding:reminders:skip_morning"
+    else:
+        label = "⏭ Пропустить вечер"
+        cb = "onboarding:reminders:skip_evening"
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=label, callback_data=cb)]])
+
+
+def onboarding_presets_kb(selected: Optional[set[str]] = None) -> InlineKeyboardMarkup:
+    selected = selected or set()
+    def mark(key: str, label: str) -> str:
+        return ("✅ " if key in selected else "") + label
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=mark("work", "💼 Работа (часы)"), callback_data="onboarding:preset:work")],
+            [
+                InlineKeyboardButton(text=mark("meditation", "🧘 Медитация (да/нет)"), callback_data="onboarding:preset:meditation"),
+                InlineKeyboardButton(text=mark("sport", "🏋️ Спорт (да/нет)"), callback_data="onboarding:preset:sport"),
+            ],
+            [InlineKeyboardButton(text=mark("custom", "➕ Своя привычка"), callback_data="onboarding:preset:custom")],
+            [InlineKeyboardButton(text="✅ Готово", callback_data="onboarding:preset:done")],
+        ]
+    )
+
+
+def onboarding_xp_kb(tracker_id: int, per_hour: bool = False) -> InlineKeyboardMarkup:
+    suffix = "/час" if per_hour else ""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=f"2 XP{suffix}", callback_data=f"onboarding:xp:{tracker_id}:2"),
+                InlineKeyboardButton(text=f"5 XP{suffix}", callback_data=f"onboarding:xp:{tracker_id}:5"),
+                InlineKeyboardButton(text=f"10 XP{suffix}", callback_data=f"onboarding:xp:{tracker_id}:10"),
+            ],
+            [InlineKeyboardButton(text="✏️ Свое", callback_data=f"onboarding:xp_custom:{tracker_id}")],
+        ]
+    )
+
+
+def onboarding_custom_type_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Да/нет", callback_data="onboarding:custom_type:binary"),
+                InlineKeyboardButton(text="⏱ Время (часы)", callback_data="onboarding:custom_type:time"),
+            ],
+            [
+                InlineKeyboardButton(text="🔢 Количество", callback_data="onboarding:custom_type:count"),
+                InlineKeyboardButton(text="⭐️ Шкала 1–10", callback_data="onboarding:custom_type:scale"),
+            ],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="onboarding:back_to_presets")],
+        ]
+    )
+
+
+def onboarding_today_continue_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➡️ Дальше", callback_data="onboarding:next_after_today")],
+            [InlineKeyboardButton(text="⏭ Пропустить", callback_data="onboarding:next_after_today")],
+        ]
+    )
+
+
+def onboarding_goals_choice_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Поставить цель (10 сек)", callback_data="onboarding:goals:start")],
+            [InlineKeyboardButton(text="⏭ Позже", callback_data="onboarding:goals:skip")],
+        ]
+    )
+
+
+def onboarding_goal_pick_kb(tracker_ids: list[int]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for tracker_id in tracker_ids:
+        tracker = get_tracker(tracker_id)
+        if not tracker:
+            continue
+        rows.append([InlineKeyboardButton(text=tracker.name, callback_data=f"onboarding:goal_pick:{tracker_id}")])
+    rows.append([InlineKeyboardButton(text="⏭ Пропустить", callback_data="onboarding:goals:skip")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def onboarding_goal_period_kb_v2(tracker_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Неделя", callback_data=f"onboarding:goal_period:{tracker_id}:week"),
+                InlineKeyboardButton(text="Месяц", callback_data=f"onboarding:goal_period:{tracker_id}:month"),
+                InlineKeyboardButton(text="Год", callback_data=f"onboarding:goal_period:{tracker_id}:year"),
+            ],
+            [InlineKeyboardButton(text="⏭ Пропустить", callback_data="onboarding:goals:skip")],
+        ]
+    )
+
+
+def onboarding_goal_value_kb(tracker: Tracker, period: str) -> InlineKeyboardMarkup:
+    if tracker.type == "time":
+        options = [5, 10, 20]
+        rows = [
+            [
+                InlineKeyboardButton(
+                    text=f"{v}{tracker.unit or 'ч'}",
+                    callback_data=f"onboarding:goal_set:{tracker.id}:{period}:{v}",
+                )
+                for v in options
+            ]
+        ]
+    else:
+        options = [3, 5, 7]
+        rows = [
+            [
+                InlineKeyboardButton(
+                    text=str(v),
+                    callback_data=f"onboarding:goal_set:{tracker.id}:{period}:{v}",
+                )
+                for v in options
+            ]
+        ]
+    rows.append([InlineKeyboardButton(text="✏️ Свое", callback_data=f"onboarding:goal_custom:{tracker.id}:{period}")])
+    rows.append([InlineKeyboardButton(text="⏭ Пропустить", callback_data="onboarding:goals:skip")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def onboarding_journal_choice_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🗒 Попробовать", callback_data="onboarding:journal:try")],
+            [InlineKeyboardButton(text="⏭ Позже", callback_data="onboarding:journal:skip")],
         ]
     )
 
@@ -3546,10 +3752,161 @@ async def send_onboarding_step(message: Message, state: FSMContext, step: int) -
     if step == 14:
         await state.clear()
         await message.answer(
-            "Готово. Внизу меню: Сегодня, Трекеры, Дневник и Настройки.",
+            "Готово. Внизу меню: Сегодня, Настройки трекеров, Дневник и Настройки.",
             reply_markup=onboarding_finish_kb(),
         )
         return
+
+
+async def send_onboarding_start(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await state.update_data(onboarding=True, onboarding_v2=True)
+    await message.answer(
+        "Привет! Это <b>Компас</b> — трекер привычек + дневник.\n\n"
+        "Настроим за 1–2 минуты:\n"
+        "• утром — задаешь <b>Главную цель дня</b>\n"
+        "• днем — отмечаешь привычки и получаешь XP\n"
+        "• вечером — 1 минута итога (можно голосом)\n"
+        "• в воскресенье — недельный отчет\n\n"
+        "Как начнем?",
+        reply_markup=onboarding_start_kb(),
+    )
+
+
+async def send_onboarding_timezone_prompt(message: Message, state: FSMContext) -> None:
+    await state.set_state(SettingsStates.timezone)
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="timezone")
+    await message.answer(
+        "<b>Часовой пояс</b>\n"
+        "Зачем: чтобы “Сегодня”, streak и отчеты совпадали с твоим днем.\n\n"
+        "Сделай: напиши текущее время у тебя сейчас (HH:MM).\n"
+        "Пример: 21:30"
+    )
+
+
+async def send_onboarding_reminders_prompt(message: Message, state: FSMContext) -> None:
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="reminders")
+    await message.answer(
+        "<b>Напоминания</b>\n"
+        "Зачем: чтобы Компас сам пинал тебя утром/вечером.\n\n"
+        "Сделай: включить напоминания?",
+        reply_markup=onboarding_reminders_choice_kb(),
+    )
+
+
+async def send_onboarding_morning_time_prompt(message: Message, state: FSMContext) -> None:
+    await state.set_state(SettingsStates.morning_time)
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="morning")
+    await message.answer(
+        "<b>Утреннее напоминание</b>\n"
+        "Зачем: в это время я спрошу Главную цель дня.\n\n"
+        "Сделай: укажи время (HH:MM). Например 09:30.",
+        reply_markup=onboarding_skip_time_kb("morning"),
+    )
+
+
+async def send_onboarding_evening_time_prompt(message: Message, state: FSMContext) -> None:
+    await state.set_state(SettingsStates.evening_time)
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="evening")
+    await message.answer(
+        "<b>Вечернее напоминание</b>\n"
+        "Зачем: 1 минута на итоги дня (можно голосом).\n\n"
+        "Сделай: укажи время (HH:MM). Например 23:00.",
+        reply_markup=onboarding_skip_time_kb("evening"),
+    )
+
+
+async def send_onboarding_presets_prompt(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    selected = set((data.get("onboarding_presets") or "").split(",")) if data.get("onboarding_presets") else set()
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="presets")
+    await message.answer(
+        "<b>Добавим привычки</b>\n"
+        "Зачем: чтобы экран “Сегодня” сразу был полезным.\n\n"
+        "Сделай: выбери 1–3 привычки (можно добавить потом).",
+        reply_markup=onboarding_presets_kb(selected),
+    )
+
+
+async def send_onboarding_xp_prompt(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    ids: list[int] = data.get("onboarding_tracker_ids") or []
+    idx = int(data.get("onboarding_xp_idx") or 0)
+    if idx >= len(ids):
+        await send_onboarding_today_prompt(message, state)
+        return
+    tracker_id = ids[idx]
+    tracker = get_tracker(int(tracker_id))
+    if not tracker:
+        await state.update_data(onboarding_xp_idx=idx + 1)
+        await send_onboarding_xp_prompt(message, state)
+        return
+    per_hour = tracker.type == "time"
+    unit = tracker.unit or ""
+    if per_hour:
+        text = (
+            f"<b>{tracker.name}</b>\n"
+            "Зачем: XP — это “вес” привычки. Чем сложнее — тем больше XP.\n\n"
+            f"Сделай: сколько XP давать за <b>1 {unit or 'час'}</b>?"
+        )
+    else:
+        text = (
+            f"<b>{tracker.name}</b>\n"
+            "Зачем: XP — это “вес” привычки. Чем сложнее — тем больше XP.\n\n"
+            "Сделай: сколько XP давать за выполнение?"
+        )
+    await message.answer(text, reply_markup=onboarding_xp_kb(tracker.id, per_hour=per_hour))
+
+
+async def send_onboarding_today_prompt(message: Message, state: FSMContext) -> None:
+    user = get_or_create_user(message.from_user.id)
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="today")
+    await send_today(message, user)
+    await message.answer(
+        "Готово ✅\n\n"
+        "Сделай: нажми на любую привычку выше, чтобы поставить первую отметку (попробуй сейчас).",
+        reply_markup=onboarding_today_continue_kb(),
+    )
+
+
+async def send_onboarding_goals_prompt(message: Message, state: FSMContext) -> None:
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="goals")
+    await message.answer(
+        "<b>Цели по привычкам</b>\n"
+        "Зачем: цель показывает прогресс за неделю/месяц/год прямо на кнопке.\n\n"
+        "Пример:\n"
+        "• Медитация: цель 5/нед → будет 2/5\n"
+        "• Работа: цель 20ч/нед → будет 6ч/20ч\n\n"
+        "Сделай: поставить цель сейчас?",
+        reply_markup=onboarding_goals_choice_kb(),
+    )
+
+
+async def send_onboarding_journal_prompt(message: Message, state: FSMContext) -> None:
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="journal")
+    await message.answer(
+        "<b>Дневник (опционально)</b>\n"
+        "Зачем: 1 фраза или голос, чтобы раз в неделю был отчет и инсайты.\n\n"
+        "Сделай: хочешь попробовать сейчас?",
+        reply_markup=onboarding_journal_choice_kb(),
+    )
+
+
+async def send_onboarding_finish_prompt(message: Message, state: FSMContext) -> None:
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="finish")
+    await message.answer(
+        "<b>Готово. Как пользоваться:</b>\n\n"
+        "1) Утром:\n"
+        "• “Сегодня” → задай <b>Главную цель дня</b>.\n\n"
+        "2) Днем:\n"
+        "• “Сегодня” → отмечай привычки и получай XP.\n"
+        "• Пропустил день? “Настройки трекеров” → “Заполнить прошлые дни”.\n\n"
+        "3) Вечером:\n"
+        "• “Дневник” → 1 фраза или голос → “Завершить заметку”.\n\n"
+        "Цели:\n"
+        "• “Настройки трекеров” → выбери привычку → 🎯 Цели.\n",
+        reply_markup=onboarding_finish_kb(),
+    )
 
 
 def today_inline_kb(user_tg_id: int) -> InlineKeyboardMarkup:
@@ -3569,8 +3926,8 @@ def evening_checkin_text(user_id: int) -> str:
     }.get(mission.status, mission.status)
     return (
         "🌙 Вечерний чек-ин\n"
-        "Удалось выполнить миссию?\n"
-        f"🎯 Миссия: {mission_text} | {status_label}"
+        "Удалось выполнить главную цель дня?\n"
+        f"🎯 Главная цель дня: {mission_text} | {status_label}"
     )
 
 
@@ -3641,7 +3998,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     user = get_or_create_user(message.from_user.id)
     await state.clear()
     if not user.onboarding_done:
-        await send_onboarding_step(message, state, 1)
+        await send_onboarding_start(message, state)
         return
     await send_today(message, user)
     await message.answer("Меню обновлено ✅", reply_markup=main_reply_kb(message.from_user.id))
@@ -3812,6 +4169,295 @@ async def settings_back(query, state: FSMContext) -> None:
 async def onboarding_cb(query, state: FSMContext) -> None:
     parts = query.data.split(":")
     action = parts[1] if len(parts) > 1 else ""
+    sub = parts[2] if len(parts) > 2 else ""
+
+    # ----------------------------
+    # Onboarding v2 (Компас)
+    # ----------------------------
+    if action == "mode":
+        await state.update_data(onboarding=True, onboarding_v2=True)
+        if sub == "video":
+            # Short "how it works" video (optional)
+            await send_onboarding_video(query.message, 4, onboarding_video_kb())
+        else:
+            await send_onboarding_timezone_prompt(query.message, state)
+        await query.answer()
+        return
+
+    if action == "skip":
+        set_onboarding_done(query.from_user.id, True)
+        await state.clear()
+        user = get_or_create_user(query.from_user.id)
+        await send_today(query.message, user)
+        await query.message.answer(
+            "Меню обновлено ✅", reply_markup=main_reply_kb(query.from_user.id)
+        )
+        await query.answer()
+        return
+
+    if action == "tz_confirm":
+        data = await state.get_data()
+        pending_tz = (data.get("onboarding_pending_tz") or "").strip()
+        if sub == "yes" and pending_tz:
+            user = get_or_create_user(query.from_user.id)
+            update_user_timezone(user.id, pending_tz)
+            await state.set_state(None)
+            await send_onboarding_reminders_prompt(query.message, state)
+        else:
+            await send_onboarding_timezone_prompt(query.message, state)
+        await query.answer()
+        return
+
+    if action == "reminders":
+        user = get_or_create_user(query.from_user.id)
+        if sub == "on":
+            await send_onboarding_morning_time_prompt(query.message, state)
+        elif sub == "off":
+            await state.set_state(None)
+            await send_onboarding_presets_prompt(query.message, state)
+        elif sub == "skip_morning":
+            update_user_reminders(user.id, morning_time="")
+            await send_onboarding_evening_time_prompt(query.message, state)
+        elif sub == "skip_evening":
+            update_user_reminders(user.id, evening_time="")
+            await state.set_state(None)
+            await send_onboarding_presets_prompt(query.message, state)
+        await query.answer()
+        return
+
+    if action == "back_to_presets":
+        await state.set_state(None)
+        await send_onboarding_presets_prompt(query.message, state)
+        await query.answer()
+        return
+
+    if action == "preset":
+        user = get_or_create_user(query.from_user.id)
+        data = await state.get_data()
+        selected = (
+            set((data.get("onboarding_presets") or "").split(","))
+            if data.get("onboarding_presets")
+            else set()
+        )
+        tracker_ids: list[int] = data.get("onboarding_tracker_ids") or []
+        preset_map: dict = data.get("onboarding_preset_map") or {}
+
+        if sub in {"work", "meditation", "sport"}:
+            if sub in preset_map:
+                await query.answer("Уже добавлено ✅", show_alert=False)
+                return
+            if sub == "work":
+                tracker_id = add_tracker(
+                    user_id=user.id, name="Работа", type_="time", xp=5, unit="ч"
+                )
+            elif sub == "meditation":
+                tracker_id = add_tracker(
+                    user_id=user.id, name="Медитация", type_="binary", xp=5
+                )
+            else:
+                tracker_id = add_tracker(user_id=user.id, name="Спорт", type_="binary", xp=10)
+            preset_map[sub] = tracker_id
+            tracker_ids.append(int(tracker_id))
+            selected.add(sub)
+            await state.update_data(
+                onboarding_presets=",".join(sorted(selected)),
+                onboarding_tracker_ids=tracker_ids,
+                onboarding_preset_map=preset_map,
+            )
+            try:
+                await query.message.edit_reply_markup(
+                    reply_markup=onboarding_presets_kb(selected)
+                )
+            except Exception:
+                pass
+            await query.answer("Добавлено ✅", show_alert=False)
+            return
+
+        if sub == "custom":
+            await state.set_state(OnboardingStates.custom_tracker_name)
+            await state.update_data(onboarding=True, onboarding_v2=True)
+            await query.message.answer(
+                "Как назовем привычку? (коротко, например: Чтение)\n"
+                "Чтобы отменить — напиши: отмена"
+            )
+            await query.answer()
+            return
+
+        if sub == "done":
+            if not tracker_ids:
+                await query.answer("Выбери хотя бы одну привычку.", show_alert=True)
+                return
+            await state.update_data(onboarding_xp_idx=0, onboarding_tracker_ids=tracker_ids)
+            await send_onboarding_xp_prompt(query.message, state)
+            await query.answer()
+            return
+
+    if action == "custom_type":
+        data = await state.get_data()
+        name = (data.get("onboarding_custom_name") or "").strip()
+        if not name:
+            await send_onboarding_presets_prompt(query.message, state)
+            await query.answer()
+            return
+        if sub not in {"binary", "time", "count", "scale"}:
+            await query.answer()
+            return
+        user = get_or_create_user(query.from_user.id)
+        unit = "ч" if sub == "time" else ""
+        tracker_id = add_tracker(user_id=user.id, name=name, type_=sub, xp=5, unit=unit)
+        tracker_ids: list[int] = data.get("onboarding_tracker_ids") or []
+        tracker_ids.append(int(tracker_id))
+        selected = (
+            set((data.get("onboarding_presets") or "").split(","))
+            if data.get("onboarding_presets")
+            else set()
+        )
+        selected.add("custom")
+        await state.update_data(
+            onboarding_custom_name=None,
+            onboarding_tracker_ids=tracker_ids,
+            onboarding_presets=",".join(sorted(selected)),
+        )
+        await state.set_state(None)
+        await query.message.answer("Добавлено ✅")
+        await send_onboarding_presets_prompt(query.message, state)
+        await query.answer()
+        return
+
+    if action == "xp":
+        try:
+            tracker_id = int(sub)
+            xp_value = int(parts[3]) if len(parts) > 3 else None
+        except (ValueError, TypeError):
+            await query.answer()
+            return
+        if xp_value is None:
+            await query.answer()
+            return
+        update_tracker(tracker_id, xp=xp_value)
+        data = await state.get_data()
+        idx = int(data.get("onboarding_xp_idx") or 0) + 1
+        await state.update_data(onboarding_xp_idx=idx)
+        await send_onboarding_xp_prompt(query.message, state)
+        await query.answer()
+        return
+
+    if action == "xp_custom":
+        tracker_id = int(sub) if sub.isdigit() else None
+        if not tracker_id:
+            await query.answer()
+            return
+        tracker = get_tracker(tracker_id)
+        per_hour = bool(tracker and tracker.type == "time")
+        await state.set_state(OnboardingStates.custom_tracker_xp)
+        await state.update_data(
+            onboarding_xp_custom_tracker_id=tracker_id, onboarding_xp_custom_per_hour=per_hour
+        )
+        await query.message.answer(
+            f"Введи число: сколько XP {'за 1 час' if per_hour else 'за выполнение'}?"
+        )
+        await query.answer()
+        return
+
+    if action == "next_after_today":
+        await send_onboarding_goals_prompt(query.message, state)
+        await query.answer()
+        return
+
+    if action == "goals":
+        data = await state.get_data()
+        tracker_ids: list[int] = data.get("onboarding_tracker_ids") or []
+        if sub == "start" and tracker_ids:
+            await query.message.answer(
+                "Выбери привычку для цели:", reply_markup=onboarding_goal_pick_kb(tracker_ids)
+            )
+        else:
+            await send_onboarding_journal_prompt(query.message, state)
+        await query.answer()
+        return
+
+    if action == "goal_pick":
+        tracker_id = int(sub) if sub.isdigit() else None
+        if not tracker_id:
+            await query.answer()
+            return
+        await query.message.answer(
+            "На какой период ставим цель?", reply_markup=onboarding_goal_period_kb_v2(tracker_id)
+        )
+        await query.answer()
+        return
+
+    if action == "goal_period":
+        tracker_id = int(sub) if sub.isdigit() else None
+        period = parts[3] if len(parts) > 3 else ""
+        tracker = get_tracker(tracker_id) if tracker_id else None
+        if not tracker or period not in {"week", "month", "year"}:
+            await query.answer()
+            return
+        hint = "сколько часов" if tracker.type == "time" else "сколько раз"
+        period_label = {"week": "неделю", "month": "месяц", "year": "год"}.get(period, period)
+        await query.message.answer(
+            f"<b>{tracker.name}</b>\n"
+            f"Сделай: задай цель на {period_label} — {hint}.",
+            reply_markup=onboarding_goal_value_kb(tracker, period),
+        )
+        await query.answer()
+        return
+
+    if action == "goal_set":
+        try:
+            tracker_id = int(sub)
+            period = parts[3] if len(parts) > 3 else ""
+            value = float(parts[4]) if len(parts) > 4 else None
+        except (ValueError, TypeError):
+            await query.answer()
+            return
+        if period not in {"week", "month", "year"} or value is None:
+            await query.answer()
+            return
+        set_tracker_goal(tracker_id, period, float(value))
+        await refresh_today_view(
+            query.from_user.id, query.message.bot, chat_id=query.message.chat.id, force_new=True
+        )
+        await send_onboarding_journal_prompt(query.message, state)
+        await query.answer()
+        return
+
+    if action == "goal_custom":
+        tracker_id = int(sub) if sub.isdigit() else None
+        period = parts[3] if len(parts) > 3 else ""
+        tracker = get_tracker(tracker_id) if tracker_id else None
+        if not tracker or period not in {"week", "month", "year"}:
+            await query.answer()
+            return
+        await state.set_state(OnboardingStates.goal_custom_value)
+        await state.update_data(onboarding_goal_tracker_id=tracker.id, onboarding_goal_period=period)
+        unit = tracker.unit or ("раз" if tracker.type == "binary" else "")
+        unit_note = f" ({unit})" if unit else ""
+        await query.message.answer(f"Введи число для цели{unit_note}. Например 5.")
+        await query.answer()
+        return
+
+    if action == "journal":
+        if sub == "try":
+            await query.message.answer(
+                "Открой дневник и напиши 1 фразу или отправь голосовое.\n"
+                "Это занимает 30–60 секунд.",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="🗒 Открыть дневник", callback_data="journal:start")],
+                        [InlineKeyboardButton(text="➡️ Дальше", callback_data="onboarding:journal:skip")],
+                    ]
+                ),
+            )
+        else:
+            await send_onboarding_finish_prompt(query.message, state)
+        await query.answer()
+        return
+
+    # ----------------------------
+    # Legacy onboarding (v1)
+    # ----------------------------
     if action == "next":
         try:
             step = int(parts[2])
@@ -3845,10 +4491,76 @@ async def onboarding_cb(query, state: FSMContext) -> None:
         await state.clear()
         user = get_or_create_user(query.from_user.id)
         await send_today(query.message, user)
-        await query.message.answer("Меню обновлено ✅", reply_markup=main_reply_kb(query.from_user.id))
+        await query.message.answer(
+            "Меню обновлено ✅", reply_markup=main_reply_kb(query.from_user.id)
+        )
         await query.answer()
         return
     await query.answer()
+
+
+@router.message(OnboardingStates.custom_tracker_name)
+async def onboarding_custom_tracker_name(message: Message, state: FSMContext) -> None:
+    raw = (message.text or "").strip()
+    if not raw:
+        await message.answer("Напиши название привычки (1 строка).")
+        return
+    if raw.lower() in {"отмена", "cancel", "назад", "back"}:
+        await state.set_state(None)
+        await send_onboarding_presets_prompt(message, state)
+        return
+    name = raw[:80].strip()
+    await state.update_data(onboarding_custom_name=name)
+    await state.set_state(None)
+    await message.answer(
+        f"Ок. <b>{html.escape(name)}</b>\n\nВыбери тип:",
+        reply_markup=onboarding_custom_type_kb(),
+    )
+
+
+@router.message(OnboardingStates.custom_tracker_xp)
+async def onboarding_custom_xp(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    tracker_id = data.get("onboarding_xp_custom_tracker_id")
+    if not tracker_id:
+        await state.set_state(None)
+        await send_onboarding_xp_prompt(message, state)
+        return
+    try:
+        xp_value = int((message.text or "").strip())
+    except ValueError:
+        await message.answer("Нужно число. Например 5.")
+        return
+    update_tracker(int(tracker_id), xp=xp_value)
+    await state.set_state(None)
+    idx = int(data.get("onboarding_xp_idx") or 0) + 1
+    await state.update_data(onboarding_xp_idx=idx)
+    await send_onboarding_xp_prompt(message, state)
+
+
+@router.message(OnboardingStates.goal_custom_value)
+async def onboarding_goal_custom_value(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    tracker_id = data.get("onboarding_goal_tracker_id")
+    period = data.get("onboarding_goal_period")
+    if not tracker_id or period not in {"week", "month", "year"}:
+        await state.set_state(None)
+        await send_onboarding_journal_prompt(message, state)
+        return
+    try:
+        value = float((message.text or "").strip().replace(",", "."))
+    except ValueError:
+        await message.answer("Нужно число. Например 5.")
+        return
+    set_tracker_goal(int(tracker_id), str(period), float(value))
+    await state.set_state(None)
+    await refresh_today_view(message.from_user.id, message.bot, chat_id=message.chat.id, force_new=True)
+    await send_onboarding_journal_prompt(message, state)
+
+
+@router.message(SettingsStates.timezone_confirm)
+async def settings_timezone_confirm(message: Message, state: FSMContext) -> None:
+    await message.answer("Нажми кнопку: ✅ Да или ✏️ Исправить.")
 
 
 # ----------------------------
@@ -3861,15 +4573,15 @@ async def mission_cb(query, state: FSMContext):
     mission = get_mission(user.id)
     if action == "set":
         await state.set_state(MissionStates.text)
-        await query.message.answer("Напиши текст миссии (1 строка).")
+        await query.message.answer("Напиши главную цель дня (1 строка).")
     elif action == "done":
         if mission and mission.status in {"done", "partial", "fail"}:
-            await query.answer("Миссия уже отмечена.", show_alert=False)
+            await query.answer("Цель дня уже отмечена.", show_alert=False)
             await refresh_today_view(query.from_user.id, query.message.bot)
             return
         update_mission(user.id, status="done")
         lvl, xp, up = add_xp(user.id, 10)
-        txt = "Миссия отмечена как ✅ (+10 XP)"
+        txt = "Цель дня отмечена как ✅ (+10 XP)"
         if up:
             txt += f"\n🎉 Новый уровень: {lvl}"
         await query.answer(txt, show_alert=False)
@@ -3877,12 +4589,12 @@ async def mission_cb(query, state: FSMContext):
         await maybe_start_diary_after_mission(user, state, query.message.bot, query.message.chat.id)
     elif action == "partial":
         if mission and mission.status in {"done", "partial", "fail"}:
-            await query.answer("Миссия уже отмечена.", show_alert=False)
+            await query.answer("Цель дня уже отмечена.", show_alert=False)
             await refresh_today_view(query.from_user.id, query.message.bot)
             return
         update_mission(user.id, status="partial")
         lvl, xp, up = add_xp(user.id, 5)
-        txt = "Миссия отмечена как ↩️ частично (+5 XP)"
+        txt = "Цель дня отмечена как ↩️ частично (+5 XP)"
         if up:
             txt += f"\n🎉 Новый уровень: {lvl}"
         await query.answer(txt, show_alert=False)
@@ -3890,19 +4602,19 @@ async def mission_cb(query, state: FSMContext):
         await maybe_start_diary_after_mission(user, state, query.message.bot, query.message.chat.id)
     elif action == "fail":
         if mission and mission.status in {"done", "partial", "fail"}:
-            await query.answer("Миссия уже отмечена.", show_alert=False)
+            await query.answer("Цель дня уже отмечена.", show_alert=False)
             await refresh_today_view(query.from_user.id, query.message.bot)
             return
         update_mission(user.id, status="fail")
-        await query.answer("Миссия отмечена как ❌", show_alert=False)
+        await query.answer("Цель дня отмечена как ❌", show_alert=False)
         await refresh_today_view(query.from_user.id, query.message.bot)
         await maybe_start_diary_after_mission(user, state, query.message.bot, query.message.chat.id)
     elif action == "done_def":
         await state.set_state(MissionStates.done_def)
-        await query.message.answer("Напиши критерий done.")
+        await query.message.answer("Напиши критерий выполнения (что считается done).")
     elif action == "when":
         await state.set_state(MissionStates.when_do)
-        await query.message.answer("Когда планируешь делать миссию? (например 14:00–16:00)")
+        await query.message.answer("Когда планируешь делать цель дня? (например 14:00–16:00)")
     await query.answer()
 
 
@@ -3911,7 +4623,7 @@ async def mission_set_text(message: Message, state: FSMContext) -> None:
     user = get_or_create_user(message.from_user.id)
     text = message.text.strip()
     update_mission(user.id, text=text, status="set")
-    await message.answer("Сохранил миссию.", reply_markup=main_reply_kb(message.from_user.id))
+    await message.answer("Сохранил цель дня ✅", reply_markup=main_reply_kb(message.from_user.id))
     await refresh_today_view(message.from_user.id, message.bot)
     await state.clear()
 
@@ -3921,7 +4633,7 @@ async def mission_set_done_def(message: Message, state: FSMContext) -> None:
     user = get_or_create_user(message.from_user.id)
     update_mission(user.id, done_def=message.text.strip())
     await message.answer(
-        "Сохранил критерий done.", reply_markup=main_reply_kb(message.from_user.id)
+        "Сохранил критерий выполнения ✅", reply_markup=main_reply_kb(message.from_user.id)
     )
     await refresh_today_view(message.from_user.id, message.bot)
     await state.clear()
@@ -3932,7 +4644,7 @@ async def mission_set_when(message: Message, state: FSMContext) -> None:
     user = get_or_create_user(message.from_user.id)
     update_mission(user.id, when_do=message.text.strip())
     await message.answer(
-        "Сохранил время для миссии.", reply_markup=main_reply_kb(message.from_user.id)
+        "Сохранил время для цели дня ✅", reply_markup=main_reply_kb(message.from_user.id)
     )
     await refresh_today_view(message.from_user.id, message.bot)
     await state.clear()
@@ -3945,11 +4657,11 @@ async def settings_set_morning_time(message: Message, state: FSMContext) -> None
         await message.answer("Нужно время в формате HH:MM. Например 08:30.")
         return
     data = await state.get_data()
-    if parsed == "" and data.get("onboarding_step") == "morning":
-        await message.answer("Нужно время, а не 'нет'.")
-        return
     user = get_or_create_user(message.from_user.id)
     update_user_reminders(user.id, morning_time=parsed)
+    if data.get("onboarding_v2") and data.get("onboarding_step") == "morning":
+        await send_onboarding_evening_time_prompt(message, state)
+        return
     if data.get("onboarding_step") == "morning":
         await state.clear()
         await message.answer(
@@ -3969,11 +4681,12 @@ async def settings_set_evening_time(message: Message, state: FSMContext) -> None
         await message.answer("Нужно время в формате HH:MM. Например 21:30.")
         return
     data = await state.get_data()
-    if parsed == "" and data.get("onboarding_step") == "evening":
-        await message.answer("Нужно время, а не 'нет'.")
-        return
     user = get_or_create_user(message.from_user.id)
     update_user_reminders(user.id, evening_time=parsed)
+    if data.get("onboarding_v2") and data.get("onboarding_step") == "evening":
+        await state.set_state(None)
+        await send_onboarding_presets_prompt(message, state)
+        return
     if data.get("onboarding_step") == "evening":
         await state.clear()
         await message.answer(
@@ -3995,11 +4708,21 @@ async def settings_set_timezone(message: Message, state: FSMContext) -> None:
     if parsed == "":
         await message.answer("Нужно время, а не 'нет'.")
         return
+    data = await state.get_data()
+    if data.get("onboarding_v2") and data.get("onboarding_step") == "timezone":
+        tz = _infer_tz_from_local_time(parsed)
+        await state.update_data(onboarding_pending_tz=tz)
+        await state.set_state(SettingsStates.timezone_confirm)
+        await message.answer(
+            f"Похоже, твой часовой пояс <b>{tz}</b>. Верно?",
+            reply_markup=onboarding_tz_confirm_kb(),
+        )
+        return
+
     user = get_or_create_user(message.from_user.id)
     tz = _infer_tz_from_local_time(parsed)
     update_user_timezone(user.id, tz)
     user = get_or_create_user(message.from_user.id)
-    data = await state.get_data()
     if data.get("onboarding_step") == "timezone":
         await state.clear()
         await message.answer(
@@ -4065,12 +4788,12 @@ async def settings_set_google_oauth(message: Message, state: FSMContext) -> None
 async def checkin_morning_mission(message: Message, state: FSMContext) -> None:
     text = message.text.strip()
     if not text:
-        await message.answer("Напиши текст миссии (1 строка).")
+        await message.answer("Напиши главную цель дня (1 строка).")
         return
     user = get_or_create_user(message.from_user.id)
     update_mission(user.id, text=text, status="set")
     await message.answer(
-        "Миссия на сегодня сохранена ✅", reply_markup=main_reply_kb(message.from_user.id)
+        "Главная цель дня сохранена ✅", reply_markup=main_reply_kb(message.from_user.id)
     )
     await refresh_today_view(message.from_user.id, message.bot)
     await state.clear()
@@ -4379,7 +5102,14 @@ async def tracker_cb(query, state: FSMContext):
     elif action == "custom" and tracker_id:
         await state.update_data(tracker_id=tracker_id)
         await state.set_state(TrackerStates.custom_value)
-        await query.message.answer("Введи число для трекера.")
+        prompt = "Введи число."
+        if tracker:
+            unit = (tracker.unit or "").strip()
+            if tracker.type == "time":
+                prompt = f"Введи число (в {unit or 'часах'})."
+            elif tracker.type == "count":
+                prompt = f"Введи число (в {unit})." if unit else "Введи число (в штуках)."
+        await query.message.answer(prompt)
     elif action == "card" and tracker_id:
         if not tracker:
             await query.message.answer("Трекер не найден.")
@@ -4796,14 +5526,6 @@ async def tracker_goal_value(message: Message, state: FSMContext) -> None:
         await message.answer("Для шкалы 1–10 нужно число от 1 до 10.")
         return
     set_tracker_goal(tracker_id, period, value)
-    if data.get("onboarding"):
-        text = "Цель сохранена ✅"
-        if tracker:
-            text = f"{text}\n\n{tracker_goals_text(tracker)}"
-        await state.clear()
-        set_onboarding_done(message.from_user.id, True)
-        await message.answer(text, reply_markup=main_reply_kb(message.from_user.id))
-        return
     if tracker:
         await message.answer(
             f"Цель сохранена ✅\n\n{tracker_goals_text(tracker)}",
@@ -4849,30 +5571,32 @@ async def tracker_set_type(query, state: FSMContext):
     type_ = query.data.split(":")[2]
     await state.update_data(type=type_)
     data = await state.get_data()
-    xp_note = ""
-    if data.get("onboarding"):
-        xp_note = (
-            "За выполненную привычку ты получаешь очки — XP. "
-            "Ты сам решаешь, сколько: за лёгкую задачу можно поставить 1 XP, "
-            "за сложную — 15.\n\n"
-        )
-    if type_ == "count":
-        await state.set_state(TrackerStates.xp_count_map)
-        await query.message.answer(
-            f"{xp_note}Задай XP правила (пример: 1-5 2-10 3-30). "
-            "Если значения нет в списке, XP будет 0."
-        )
-    elif type_ == "scale":
-        await state.set_state(TrackerStates.xp_scale_min)
-        await query.message.answer(f"{xp_note}Сколько XP за оценку 1?")
+    await state.set_state(TrackerStates.xp)
+    per_hour = type_ == "time"
+    if per_hour:
+        text = "Сколько XP давать за 1 час? Выбери кнопку или введи число."
     else:
-        await state.set_state(TrackerStates.xp)
-        if type_ == "time":
-            await query.message.answer(
-                f"{xp_note}Сколько XP давать за 1 час? (число, например 2)"
-            )
-        else:
-            await query.message.answer(f"{xp_note}XP за выполнение? (число, например 10)")
+        text = "Сколько XP давать за выполнение? Выбери кнопку или введи число."
+    await query.message.answer(text, reply_markup=tracker_create_xp_inline(per_hour=per_hour))
+    await query.answer()
+
+
+@router.callback_query(F.data.startswith("create:xp:"))
+async def tracker_set_xp_quick(query, state: FSMContext) -> None:
+    try:
+        xp = int(query.data.split(":")[2])
+    except (IndexError, ValueError):
+        await query.answer()
+        return
+    await state.update_data(xp=xp)
+    await finalize_tracker(query.message, state)
+    await query.answer()
+
+
+@router.callback_query(F.data == "create:xp_custom")
+async def tracker_set_xp_custom(query, state: FSMContext) -> None:
+    await state.set_state(TrackerStates.xp)
+    await query.message.answer("Ок. Введи число XP.")
     await query.answer()
 
 
@@ -4948,14 +5672,6 @@ async def finalize_tracker(message: Message, state: FSMContext) -> None:
         xp_scale_min=data.get("xp_scale_min"),
         xp_scale_max=data.get("xp_scale_max"),
     )
-    if data.get("onboarding"):
-        await message.answer("Трекер создан ✅")
-        await message.answer(
-            "Теперь поставим цель, чтобы она была перед глазами. На какой период?",
-            reply_markup=onboarding_goal_period_kb(tracker_id),
-        )
-        await state.clear()
-        return
     await message.answer("Трекер создан ✅", reply_markup=main_reply_kb(message.from_user.id))
     await state.clear()
 
@@ -5270,7 +5986,7 @@ async def reminders_loop(bot: Bot, dp: Dispatcher, bot_id: int) -> None:
             try:
                 await bot.send_message(
                     user.tg_id,
-                    "☀️ Доброе утро! Какая у тебя сегодня миссия?",
+                    "☀️ Доброе утро! Какая у тебя сегодня главная цель дня?",
                     reply_markup=main_reply_kb(user.tg_id),
                 )
                 await dp.storage.set_state(key=key, state=CheckinStates.morning_mission)
