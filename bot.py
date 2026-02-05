@@ -4063,6 +4063,26 @@ async def send_onboarding_today_prompt(message: Message, state: FSMContext) -> N
     )
 
 
+async def maybe_send_onboarding_after_first_mark(message: Message, state: FSMContext) -> None:
+    """During onboarding ("today" step) re-send the "continue" buttons after the first mark.
+
+    Users often scroll and lose the original "Дальше" button after they interact with trackers.
+    """
+    data = await state.get_data()
+    if not data.get("onboarding_v2"):
+        return
+    if data.get("onboarding_step") != "today":
+        return
+    if data.get("onboarding_today_marked"):
+        return
+    await state.update_data(onboarding_today_marked=True)
+    await message.answer(
+        "Супер ✅ Первая отметка есть.\n\n"
+        "Нажми «Дальше», продолжим онбординг.",
+        reply_markup=onboarding_today_continue_kb(),
+    )
+
+
 async def send_onboarding_goals_prompt(message: Message, state: FSMContext) -> None:
     await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="goals")
     await message.answer(
@@ -4584,6 +4604,8 @@ async def onboarding_cb(query, state: FSMContext) -> None:
         return
 
     if action == "next_after_today":
+        # If the user was in a tracker input state (e.g. "Ввести число"), clear it but keep onboarding data.
+        await state.set_state(None)
         await send_onboarding_goals_prompt(query.message, state)
         await query.answer()
         return
@@ -5226,6 +5248,7 @@ async def tracker_cb(query, state: FSMContext):
     if action == "tap" and tracker:
         if tracker.type == "binary":
             total, _ = tracker_progress(tracker_id, date)
+            marked_now = False
             if total == 0:
                 log_tracker(tracker_id, date, 1)
                 earned = tracker_xp_for_value(tracker, 1)
@@ -5234,6 +5257,7 @@ async def tracker_cb(query, state: FSMContext):
                 if up:
                     msg += f"\n🎉 Новый уровень: {lvl}"
                 await query.answer(msg, show_alert=False)
+                marked_now = True
             else:
                 clear_tracker_logs(tracker_id, date)
                 await query.answer("Отмена отметки ↩️", show_alert=False)
@@ -5252,12 +5276,15 @@ async def tracker_cb(query, state: FSMContext):
                     chat_id=query.message.chat.id,
                     force_new=True,
                 )
+                if marked_now:
+                    await maybe_send_onboarding_after_first_mark(query.message, state)
         else:
             text, kb = tracker_input_prompt(tracker, date)
             await query.message.answer(text, reply_markup=kb)
             await query.answer()
     elif action == "toggle" and tracker_id:
         total, _ = tracker_progress(tracker_id, date)
+        marked_now = False
         if total == 0:
             log_tracker(tracker_id, date, 1)
             earned = tracker_xp_for_value(tracker, 1) if tracker else 0
@@ -5266,6 +5293,7 @@ async def tracker_cb(query, state: FSMContext):
             if up:
                 txt += f"\n🎉 Новый уровень: {lvl}"
             await query.message.answer(txt)
+            marked_now = True
         else:
             clear_tracker_logs(tracker_id, date)
             await query.message.answer("Отмена отметки ↩️")
@@ -5284,6 +5312,8 @@ async def tracker_cb(query, state: FSMContext):
                 chat_id=query.message.chat.id,
                 force_new=True,
             )
+            if marked_now:
+                await maybe_send_onboarding_after_first_mark(query.message, state)
     elif action == "partial" and tracker_id:
         log_tracker(tracker_id, date, 0.5, partial=True)
         earned = tracker_xp_for_value(tracker, 1, partial=True) if tracker else 0
@@ -5307,6 +5337,7 @@ async def tracker_cb(query, state: FSMContext):
                 chat_id=query.message.chat.id,
                 force_new=True,
             )
+            await maybe_send_onboarding_after_first_mark(query.message, state)
     elif action == "add" and tracker_id and extra:
         value = float(extra)
         # For scale trackers "add" is actually "set rating for the day".
@@ -5337,6 +5368,7 @@ async def tracker_cb(query, state: FSMContext):
                 chat_id=query.message.chat.id,
                 force_new=True,
             )
+            await maybe_send_onboarding_after_first_mark(query.message, state)
     elif action == "custom" and tracker_id:
         await state.update_data(tracker_id=tracker_id)
         await state.set_state(TrackerStates.custom_value)
@@ -5592,7 +5624,13 @@ async def tracker_custom_value(message: Message, state: FSMContext) -> None:
             chat_id=message.chat.id,
             force_new=True,
         )
-        await state.clear()
+        await maybe_send_onboarding_after_first_mark(message, state)
+        data2 = await state.get_data()
+        if data2.get("onboarding_v2"):
+            await state.update_data(tracker_id=None)
+            await state.set_state(None)
+        else:
+            await state.clear()
 
 
 @router.message(TrackerStates.edit_name)
