@@ -3545,6 +3545,12 @@ def onboarding_video_kb() -> InlineKeyboardMarkup:
     )
 
 
+def onboarding_xp_intro_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="➡️ Дальше", callback_data="onboarding:xp_intro:next")]]
+    )
+
+
 def onboarding_tz_confirm_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -3645,6 +3651,53 @@ def apply_onboarding_xp(tracker_id: int, xp_value: int) -> None:
         update_tracker_xp_rules(tracker_id, xp_count_map=json.dumps(payload, ensure_ascii=False))
         return
     update_tracker(tracker_id, xp=xp_value)
+
+
+def find_existing_tracker_id(
+    user_id: int, *, name: str, type_: str, unit: str = ""
+) -> Optional[int]:
+    """Best-effort de-duplication for onboarding presets.
+
+    Users sometimes restart onboarding; we should reuse existing preset trackers
+    instead of creating duplicates.
+    """
+    name_norm = (name or "").strip().lower()
+    unit_norm = (unit or "").strip()
+    for t in list_trackers(user_id):
+        if (t.name or "").strip().lower() != name_norm:
+            continue
+        if (t.type or "").strip() != type_:
+            continue
+        if ((t.unit or "").strip()) != unit_norm:
+            continue
+        return int(t.id)
+    return None
+
+
+def sort_onboarding_tracker_ids(tracker_ids: list[int]) -> list[int]:
+    """Prefer a friendly onboarding order (work first) while keeping stability."""
+    trackers: list[tuple[int, Optional[Tracker]]] = [(int(tid), get_tracker(int(tid))) for tid in tracker_ids]
+    original_index = {tid: idx for idx, tid in enumerate(tracker_ids)}
+
+    def prio(item: tuple[int, Optional[Tracker]]) -> tuple[int, int]:
+        tid, tr = item
+        if not tr:
+            return 99, original_index.get(tid, 9999)
+        name = (tr.name or "").strip().lower()
+        if tr.type == "time" and name == "работа":
+            p = 0
+        elif tr.type == "binary" and name == "медитация":
+            p = 1
+        elif tr.type == "count" and name == "чтение":
+            p = 2
+        elif tr.type == "scale" and name == "настроение":
+            p = 3
+        else:
+            p = 10
+        return p, original_index.get(tid, 9999)
+
+    trackers.sort(key=prio)
+    return [tid for tid, _ in trackers]
 
 
 def onboarding_custom_type_kb() -> InlineKeyboardMarkup:
@@ -3763,7 +3816,7 @@ def onboarding_goal_value_kb(tracker: Tracker, period: str) -> InlineKeyboardMar
 def onboarding_journal_choice_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🗒 Попробовать", callback_data="onboarding:journal:try")],
+            [InlineKeyboardButton(text="🗒 Записать 1 фразу", callback_data="onboarding:journal:try")],
             [InlineKeyboardButton(text="⏭ Позже", callback_data="onboarding:journal:skip")],
         ]
     )
@@ -3935,6 +3988,17 @@ async def send_onboarding_presets_prompt(message: Message, state: FSMContext) ->
     )
 
 
+async def send_onboarding_xp_intro(message: Message, state: FSMContext) -> None:
+    await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="xp_intro")
+    await message.answer(
+        "<b>XP — маленькая геймификация</b>\n"
+        "Зачем: за каждую отметку ты получаешь XP, растешь в уровне и держишь мотивацию.\n\n"
+        "Сделай: сейчас зададим правила XP для твоих привычек.\n"
+        "Начнем с <b>Работы</b> (если она есть).",
+        reply_markup=onboarding_xp_intro_kb(),
+    )
+
+
 async def send_onboarding_xp_prompt(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     ids: list[int] = data.get("onboarding_tracker_ids") or []
@@ -3952,16 +4016,26 @@ async def send_onboarding_xp_prompt(message: Message, state: FSMContext) -> None
     xp_suffix = ""
     if tracker.type == "time":
         xp_suffix = "/час"
-        how = f"Как отмечать: нажми → добавь часы (+1{unit}, +5{unit}) или введи число."
+        how = (
+            f"Как отмечать: нажми → добавь часы (+1{unit}, +5{unit}) или введи число.\n"
+            "XP начисляется пропорционально: 0.5 часа = примерно половина XP."
+        )
         task = f"Сделай: сколько XP давать за <b>1 {unit or 'час'}</b>?"
     elif tracker.type == "count":
         per = 10
         unit_label = unit or "шт"
         xp_suffix = f"/{per}{unit_label}"
-        how = f"Как отмечать: нажми → добавь {per}{unit_label} или введи число."
+        how = (
+            f"Как отмечать: нажми → добавь {per}{unit_label} или введи число.\n"
+            "XP начисляется пропорционально количеству."
+        )
         task = f"Сделай: сколько XP давать за <b>{per} {unit_label}</b>?"
     elif tracker.type == "scale":
-        how = "Как отмечать: нажми → выбери оценку 1–10."
+        xp_suffix = " (10/10)"
+        how = (
+            "Как отмечать: нажми → выбери оценку 1–10.\n"
+            "Чем выше оценка — тем больше XP."
+        )
         task = "Сделай: сколько XP давать за оценку <b>10/10</b>?"
     else:
         how = "Как отмечать: нажми → появится ✅. Нажмешь снова — отмена."
@@ -4007,9 +4081,13 @@ async def send_onboarding_goals_prompt(message: Message, state: FSMContext) -> N
 async def send_onboarding_journal_prompt(message: Message, state: FSMContext) -> None:
     await state.update_data(onboarding=True, onboarding_v2=True, onboarding_step="journal")
     await message.answer(
-        "<b>Дневник (опционально)</b>\n"
-        "Зачем: 1 фраза или голос, чтобы раз в неделю был отчет и инсайты.\n\n"
-        "Сделай: хочешь попробовать сейчас?",
+        "<b>Дневник (очень рекомендую)</b>\n"
+        "Зачем:\n"
+        "• Рефлексия: 1 мин в день — перестаешь жить “на автопилоте” и лучше понимаешь себя.\n"
+        "• Память: в конце года можно открыть любой день и вспомнить, что тогда происходило.\n"
+        "• ИИ коуч: раз в неделю читает заметки и дает тебе обратную связь.\n\n"
+        "Это самая полезная привычка — она помогает идти к целям как <b>Компас</b>.\n\n"
+        "Сделай: хочешь попробовать сейчас? (1 фраза или голос)",
         reply_markup=onboarding_journal_choice_kb(),
     )
 
@@ -4353,6 +4431,12 @@ async def onboarding_cb(query, state: FSMContext) -> None:
         await query.answer()
         return
 
+    if action == "xp_intro":
+        await state.set_state(None)
+        await send_onboarding_xp_prompt(query.message, state)
+        await query.answer()
+        return
+
     if action == "preset":
         user = get_or_create_user(query.from_user.id)
         data = await state.get_data()
@@ -4368,20 +4452,28 @@ async def onboarding_cb(query, state: FSMContext) -> None:
             if sub in preset_map:
                 await query.answer("Уже добавлено ✅", show_alert=False)
                 return
+
             if sub == "work":
-                tracker_id = add_tracker(
-                    user_id=user.id, name="Работа", type_="time", xp=5, unit="ч"
-                )
+                name, type_, unit, default_xp = "Работа", "time", "ч", 5
             elif sub == "meditation":
-                tracker_id = add_tracker(
-                    user_id=user.id, name="Медитация", type_="binary", xp=5
-                )
+                name, type_, unit, default_xp = "Медитация", "binary", "", 5
             elif sub == "reading":
-                tracker_id = add_tracker(user_id=user.id, name="Чтение", type_="count", xp=2, unit="стр")
+                name, type_, unit, default_xp = "Чтение", "count", "стр", 2
             else:  # mood
-                tracker_id = add_tracker(user_id=user.id, name="Настроение", type_="scale", xp=5)
+                name, type_, unit, default_xp = "Настроение", "scale", "", 5
+
+            existing_id = find_existing_tracker_id(user.id, name=name, type_=type_, unit=unit)
+            if existing_id:
+                tracker_id = existing_id
+                status_msg = "Уже есть ✅"
+            else:
+                tracker_id = add_tracker(
+                    user_id=user.id, name=name, type_=type_, xp=default_xp, unit=unit
+                )
+                status_msg = "Добавлено ✅"
             preset_map[sub] = tracker_id
-            tracker_ids.append(int(tracker_id))
+            if int(tracker_id) not in tracker_ids:
+                tracker_ids.append(int(tracker_id))
             selected.add(sub)
             await state.update_data(
                 onboarding_presets=",".join(sorted(selected)),
@@ -4394,7 +4486,7 @@ async def onboarding_cb(query, state: FSMContext) -> None:
                 )
             except Exception:
                 pass
-            await query.answer("Добавлено ✅", show_alert=False)
+            await query.answer(status_msg, show_alert=False)
             return
 
         if sub == "custom":
@@ -4411,8 +4503,9 @@ async def onboarding_cb(query, state: FSMContext) -> None:
             if not tracker_ids:
                 await query.answer("Выбери хотя бы одну привычку.", show_alert=True)
                 return
+            tracker_ids = sort_onboarding_tracker_ids(tracker_ids)
             await state.update_data(onboarding_xp_idx=0, onboarding_tracker_ids=tracker_ids)
-            await send_onboarding_xp_prompt(query.message, state)
+            await send_onboarding_xp_intro(query.message, state)
             await query.answer()
             return
 
@@ -4580,8 +4673,8 @@ async def onboarding_cb(query, state: FSMContext) -> None:
     if action == "journal":
         if sub == "try":
             await query.message.answer(
-                "Открой дневник и напиши 1 фразу или отправь голосовое.\n"
-                "Это занимает 30–60 секунд.",
+                "Открой дневник — я задам 5 коротких вопросов.\n"
+                "Можно ответить 1 фразой или голосом (30–60 секунд).",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [InlineKeyboardButton(text="🗒 Открыть дневник", callback_data="journal:start")],
