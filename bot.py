@@ -2147,6 +2147,16 @@ def list_franklin_marks_for_week(user_id: int, week_start: dt.date) -> set[tuple
     return {(int(r[0]), r[1]) for r in rows}
 
 
+def list_franklin_marked_virtues_for_date(user_id: int, date: dt.date) -> set[int]:
+    with db_session() as session:
+        rows = (
+            session.query(FranklinMark.virtue_id)
+            .filter(FranklinMark.user_id == user_id, FranklinMark.date == date)
+            .all()
+        )
+    return {int(r[0]) for r in rows}
+
+
 def toggle_franklin_mark(user_id: int, virtue_id: int, date: dt.date) -> Optional[bool]:
     """Toggle a Franklin mark. Returns new marked state, or None if invalid."""
     now = _utcnow()
@@ -3798,7 +3808,7 @@ def render_franklin_table(user: User, week_start: dt.date, page: int = 0) -> tup
         f"Неделя: {week_start.strftime('%d.%m')}–{week_end.strftime('%d.%m')}",
         f"Фокус: {cycle_week}/13 — {focus_title}",
         "",
-        "• = прокол, · = ок. Нажми клетку, чтобы поставить/убрать точку.",
+        "❌ = прокол, · = ок. Нажми клетку, чтобы поставить/убрать отметку.",
         "",
     ]
 
@@ -3846,7 +3856,7 @@ def render_franklin_table(user: User, week_start: dt.date, page: int = 0) -> tup
             marked = (virtue.id, d) in marks
             row.append(
                 InlineKeyboardButton(
-                    text="•" if marked else "·",
+                    text="❌" if marked else "·",
                     callback_data=f"virt:cell:{virtue.id}:{_encode_ymd(d)}",
                 )
             )
@@ -3874,8 +3884,77 @@ def render_franklin_table(user: User, week_start: dt.date, page: int = 0) -> tup
             ]
         )
     kb_rows.append(
-        [InlineKeyboardButton(text="⚙️ Настройки", callback_data=f"virt:settings:{week_key}:{page}")]
+        [
+            InlineKeyboardButton(text="📅 Сегодня (список)", callback_data=f"virt:day:{_encode_ymd(today)}:{page}"),
+            InlineKeyboardButton(text="⚙️ Настройки", callback_data=f"virt:settings:{week_key}:{page}"),
+        ]
     )
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    return "\n".join(lines), kb
+
+
+def render_franklin_day_view(user: User, date: dt.date, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    settings = get_franklin_settings(user.id)
+    if not settings:
+        settings = ensure_franklin_setup(user)
+    virtues = list_franklin_virtues(user.id)
+    if not virtues:
+        settings = ensure_franklin_setup(user)
+        virtues = list_franklin_virtues(user.id)
+    day = date
+    week_start = franklin_week_start(day)
+    week_end = week_start + dt.timedelta(days=6)
+    focus_order = franklin_focus_order(settings, week_start)
+    focus_title = next((v.title for v in virtues if v.order == focus_order), f"{focus_order}/13")
+
+    marked = list_franklin_marked_virtues_for_date(user.id, day)
+    total = len(virtues)
+    pages = max(1, (total + FRANKLIN_PAGE_SIZE - 1) // FRANKLIN_PAGE_SIZE)
+    page = max(0, min(int(page), pages - 1))
+    subset = virtues[page * FRANKLIN_PAGE_SIZE : (page + 1) * FRANKLIN_PAGE_SIZE]
+
+    lines = [
+        "🧭 Добродетели — сегодня",
+        f"Дата: {day.strftime('%d.%m.%Y')} ({['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][day.weekday()]})",
+        f"Неделя: {week_start.strftime('%d.%m')}–{week_end.strftime('%d.%m')}",
+        f"Фокус недели: {focus_order}/13 — {focus_title}",
+        "",
+        "Нажми ❌, если был прокол. Повторное нажатие уберет отметку.",
+    ]
+    kb_rows: list[list[InlineKeyboardButton]] = []
+    for virtue in subset:
+        is_focus = virtue.order == focus_order
+        title = f"{'⭐' if is_focus else ''}{virtue.order}. {virtue.title}"
+        state_btn = "❌" if virtue.id in marked else "·"
+        kb_rows.append(
+            [
+                InlineKeyboardButton(text=_short_btn(title, 24), callback_data=f"virt:card:{virtue.id}:{_encode_ymd(week_start)}:{page}"),
+                InlineKeyboardButton(text=state_btn, callback_data=f"virt:cell:{virtue.id}:{_encode_ymd(day)}"),
+            ]
+        )
+
+    # Day navigation
+    prev_day = day - dt.timedelta(days=1)
+    next_day = day + dt.timedelta(days=1)
+    today = today_iso(user.tz)
+    kb_rows.append(
+        [
+            InlineKeyboardButton(text="⬅️ День", callback_data=f"virt:day:{_encode_ymd(prev_day)}:{page}"),
+            InlineKeyboardButton(text="Сегодня", callback_data=f"virt:day:{_encode_ymd(today)}:{page}"),
+            InlineKeyboardButton(text="День ➡️", callback_data=f"virt:day:{_encode_ymd(next_day)}:{page}"),
+        ]
+    )
+    if pages > 1:
+        prev_page = max(0, page - 1)
+        next_page = min(pages - 1, page + 1)
+        kb_rows.append(
+            [
+                InlineKeyboardButton(text="⬅️ Стр", callback_data=f"virt:day:{_encode_ymd(day)}:{prev_page}"),
+                InlineKeyboardButton(text=f"{page+1}/{pages}", callback_data="virt:noop"),
+                InlineKeyboardButton(text="Стр ➡️", callback_data=f"virt:day:{_encode_ymd(day)}:{next_page}"),
+            ]
+        )
+    kb_rows.append([InlineKeyboardButton(text="📊 Таблица недели", callback_data=f"virt:open:{_encode_ymd(week_start)}:{page}")])
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
     return "\n".join(lines), kb
 
@@ -5686,6 +5765,18 @@ async def franklin_cb(query, state: FSMContext) -> None:
         await query.answer()
         return
 
+    if action == "day":
+        date_raw = parts[2] if len(parts) > 2 else ""
+        page = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0
+        day = _decode_ymd(date_raw) or today_iso(user.tz)
+        if day > today_iso(user.tz):
+            await query.answer("Будущие даты пока нельзя отмечать.", show_alert=False)
+            return
+        text, kb = render_franklin_day_view(user, day, page=page)
+        await _edit_or_send(query, text, kb)
+        await query.answer()
+        return
+
     if action == "cell":
         virtue_id = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
         date = _decode_ymd(parts[3]) if len(parts) > 3 else None
@@ -5701,10 +5792,15 @@ async def franklin_cb(query, state: FSMContext) -> None:
             return
         virtue = get_franklin_virtue_for_user(user.id, virtue_id)
         page = (int(virtue.order) - 1) // FRANKLIN_PAGE_SIZE if virtue else 0
-        week_start = franklin_week_start(date)
-        text, kb = render_franklin_table(user, week_start, page=page)
+
+        # Re-render based on the current screen type (week table vs day view).
+        if query.message and query.message.text and "Добродетели — сегодня" in query.message.text:
+            text, kb = render_franklin_day_view(user, date, page=page)
+        else:
+            week_start = franklin_week_start(date)
+            text, kb = render_franklin_table(user, week_start, page=page)
         await _edit_or_send(query, text, kb)
-        await query.answer("• Прокол" if new_state else "Убрано ✅", show_alert=False)
+        await query.answer("❌ Прокол" if new_state else "Убрано ✅", show_alert=False)
         return
 
     if action == "card":
