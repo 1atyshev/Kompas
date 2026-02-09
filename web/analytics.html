@@ -298,7 +298,7 @@
 
       .layout {
         display: grid;
-        grid-template-columns: 360px 1fr;
+        grid-template-columns: 1fr;
         gap: 12px;
         align-items: start;
       }
@@ -1282,27 +1282,7 @@
       <div class="views" id="views">
         <div class="view" id="overviewView">
           <div class="layout" id="layout">
-            <div class="col">
-          <section class="card section" id="todayCard">
-            <div class="h">
-              <div class="t">🎯 Миссия дня</div>
-              <div class="pill" id="todayDate">—</div>
-            </div>
-            <div class="today-list" id="todayList">
-              <div class="empty">Загрузи базу, чтобы увидеть миссию дня.</div>
-            </div>
-          </section>
-
-          <section class="card section" id="journalCard">
-            <div class="h">
-              <div class="t">🗒 Дневник</div>
-              <div class="pill" id="journalStat">—</div>
-            </div>
-            <div class="muted" id="journalBody">—</div>
-          </section>
-        </div>
-
-        <div class="col main-grid">
+            <div class="col main-grid">
           <section class="card section span-2" id="heatmapCard">
             <div class="h">
               <div class="h-left">
@@ -1325,24 +1305,6 @@
               </div>
               <div class="heatmap" id="heatmap"></div>
             </div>
-          </section>
-
-          <section class="card section span-2" id="goalsCard">
-            <div class="h">
-              <div class="t">🎯 Цели</div>
-              <div class="pill" id="goalsStatTotal">—</div>
-            </div>
-            <div class="muted goals-hint">Факт/план · % выполнения · 🔥 стрик</div>
-            <div class="goal-table">
-              <div class="goal-table-head">
-                <div>Привычка</div>
-                <div>Год</div>
-                <div>Месяц</div>
-                <div>Неделя</div>
-              </div>
-              <div id="goalsTable" class="goal-table-body"></div>
-            </div>
-            <div class="goal-compact-grid" id="goalsCompact"></div>
           </section>
 
           <section class="card section span-2" id="trendsCard">
@@ -1391,14 +1353,6 @@
                 </div>
               </div>
             </div>
-          </section>
-
-          <section class="card section" id="monthlyTableCard">
-            <div class="h">
-              <div class="t">📋 Привычки и цели</div>
-              <div class="pill" id="monthlyTableStat">—</div>
-            </div>
-            <div class="monthly-layout" id="monthlyTable"></div>
           </section>
 
           <section class="card section" id="monthlyChartCard">
@@ -1489,8 +1443,6 @@
         monthGoalsStat: document.getElementById("monthGoalsStat"),
         monthActiveDays: document.getElementById("monthActiveDays"),
         monthProgressStat: document.getElementById("monthProgressStat"),
-        monthlyTableStat: document.getElementById("monthlyTableStat"),
-        monthlyTable: document.getElementById("monthlyTable"),
         monthlyChartStat: document.getElementById("monthlyChartStat"),
         monthlyChart: document.getElementById("monthlyChart"),
         // player
@@ -1506,12 +1458,6 @@
         kpiXpBestDay: document.getElementById("kpiXpBestDay"),
         kpiHabits: document.getElementById("kpiHabits"),
         kpiBestHabit: document.getElementById("kpiBestHabit"),
-        // today
-        todayDate: document.getElementById("todayDate"),
-        todayList: document.getElementById("todayList"),
-        // journal
-        journalStat: document.getElementById("journalStat"),
-        journalBody: document.getElementById("journalBody"),
         // heatmap
         heatmap: document.getElementById("heatmap"),
         heatmapSub: document.getElementById("heatmapSub"),
@@ -1522,9 +1468,6 @@
         // habits
         habitsGrid: document.getElementById("habitsGrid"),
         habitsStat: document.getElementById("habitsStat"),
-        goalsStatTotal: document.getElementById("goalsStatTotal"),
-        goalsTable: document.getElementById("goalsTable"),
-        goalsCompact: document.getElementById("goalsCompact"),
       };
 
       (function stripTokenFromUrl() {
@@ -2312,34 +2255,6 @@
             bestStreak && bestStreak.tracker ? `Топ стрик: ${bestStreak.tracker.name} (${bestStreak.streak})` : "—";
         }
 
-        // Today
-        ui.todayDate.textContent = formatDateRu(todayKey);
-        ui.todayList.innerHTML = "";
-        const todayMission = missionByDate.get(todayKey);
-        const missionStatus = todayMission ? String(todayMission.status || "not_set") : "not_set";
-        const missionText = todayMission && String(todayMission.text || "").trim() ? String(todayMission.text).trim() : "Миссия не задана";
-        ui.todayList.appendChild(renderMissionCard(missionText, missionStatus));
-
-        // Journal
-        const journalDays = rangeKeys.filter((k) => journalByDate.has(k)).length;
-        ui.journalStat.textContent = `${journalDays}/${rangeDays} дней`;
-        const lastEntryKey = [...journalByDate.keys()].sort().pop();
-        const lastEntryText = lastEntryKey ? journalByDate.get(lastEntryKey) : "";
-        const reportPreview = lastReport && lastReport.analysis_text ? String(lastReport.analysis_text).trim() : "";
-        const lines = [];
-        if (lastEntryKey && lastEntryText) {
-          lines.push(`<b>Последняя заметка</b> · ${formatDateRu(lastEntryKey)}`);
-          lines.push(escapeHtml(shorten(lastEntryText, 260)));
-        } else {
-          lines.push("Нет заметок.");
-        }
-        if (reportPreview) {
-          lines.push("");
-          lines.push(`<b>Недельный отчёт</b>`);
-          lines.push(escapeHtml(shorten(reportPreview, 320)));
-        }
-        ui.journalBody.innerHTML = lines.join("<br>");
-
         // Heatmap (year view)
         const yearRange = yearRangeForKey(todayKey);
         renderHeatmap(ui.heatmap, activityByDate, xpByDate, yearRange.startKey, yearRange.endKey, todayKey);
@@ -2347,61 +2262,6 @@
         ui.heatmapStat.textContent = `${heatmapDaysActive} активных дней / ${yearRange.totalDays}`;
         if (ui.heatmapSub) {
           ui.heatmapSub.textContent = `${yearRange.year} · каждый квадрат — день · XP + события`;
-        }
-
-        // Goals
-        const goalRows = [];
-        let totalGoals = 0;
-        for (const tracker of trackers) {
-          const goals = goalsByTrackerId.get(tracker.id);
-          if (!goals) continue;
-          const stats = dailyStatsByTracker.get(tracker.id);
-          const perPeriod = {};
-          let hasAny = false;
-          for (const period of ["year", "month", "week"]) {
-            const target = safeNumber(goals.get(period) || 0);
-            if (!target) continue;
-            hasAny = true;
-            totalGoals += 1;
-            const [startKey, endKey] = periodRange(period, todayKey);
-            const progress = stats ? rangeAggregate(tracker, stats, startKey, endKey) : 0;
-            const percent = target > 0 ? clamp((progress / target) * 100, 0, 140) : 0;
-            const streak = stats ? goalStreakValue(tracker, stats, goalsByTrackerId, todayKey, period) : 0;
-            perPeriod[period] = { progress, target, percent, streak };
-          }
-          if (hasAny) goalRows.push({ tracker, perPeriod });
-        }
-        ui.goalsStatTotal.textContent = totalGoals ? `${totalGoals} целей` : "целей нет";
-        ui.goalsTable.innerHTML = "";
-        ui.goalsCompact.innerHTML = "";
-        if (!goalRows.length) {
-          const empty = document.createElement("div");
-          empty.className = "empty";
-          empty.textContent = "Добавь цели в трекерах, чтобы увидеть прогресс.";
-          ui.goalsTable.appendChild(empty);
-          ui.goalsCompact.appendChild(empty.cloneNode(true));
-        } else {
-          for (const row of goalRows) {
-            const rowEl = document.createElement("div");
-            rowEl.className = "goal-table-row";
-            const name = document.createElement("div");
-            name.className = "goal-name";
-            name.textContent = row.tracker.name;
-            rowEl.appendChild(name);
-            for (const period of ["year", "month", "week"]) {
-              rowEl.appendChild(goalCell(row.tracker, row.perPeriod[period], period));
-            }
-            ui.goalsTable.appendChild(rowEl);
-          }
-          for (const row of goalRows) {
-            const periodOrder = ["month", "week", "year"];
-            let primaryPeriod = goalPeriodByTracker.get(row.tracker.id);
-            if (!primaryPeriod || !row.perPeriod[primaryPeriod]) {
-              primaryPeriod = periodOrder.find((period) => row.perPeriod[period]);
-            }
-            if (!primaryPeriod) continue;
-            ui.goalsCompact.appendChild(goalCompactCard(row.tracker, row.perPeriod[primaryPeriod], primaryPeriod));
-          }
         }
 
         // Trends chart
@@ -2444,26 +2304,20 @@
 
       function renderMonthlyView() {
         if (!state.monthlyData || !ui.monthlyView) return;
-        const { tz, todayKey, trackers, goalsByTrackerId, dailyStatsByTracker } = state.monthlyData;
+        const { tz, trackers, goalsByTrackerId, dailyStatsByTracker } = state.monthlyData;
         const monthCtx = monthContextForTz(tz, safeNumber(state.monthOffset || 0));
         const daysInMonth = monthCtx.daysInMonth;
         ui.monthLabel.textContent = formatMonthRu(monthCtx.year, monthCtx.monthIndex);
 
-        const goalInfoByTracker = new Map();
         const dailyTargetByTracker = new Map();
         let trackersWithGoal = 0;
         for (const tracker of trackers) {
           const goalInfo = resolveGoalInfo(tracker, goalsByTrackerId.get(tracker.id));
           if (goalInfo && safeNumber(goalInfo.target || 0) > 0) trackersWithGoal += 1;
-          goalInfoByTracker.set(tracker.id, goalInfo);
           dailyTargetByTracker.set(tracker.id, dailyTargetValue(tracker, goalInfo, monthCtx));
         }
 
         const progressSeries = [];
-        const activityCounts = [];
-        const missingCounts = [];
-        const doneCounts = [];
-        const partialCounts = [];
         let progressSum = 0;
         let progressDays = 0;
         let totalCompletions = 0;
@@ -2474,30 +2328,28 @@
         for (let day = 1; day <= daysInMonth; day += 1) {
           const date = new Date(Date.UTC(monthCtx.year, monthCtx.monthIndex, day));
           const dayKey = dateToKey(date);
+
           let expected = 0;
           let done = 0;
-          let doneCount = 0;
-          let partialCount = 0;
           let anyActivity = false;
           let activityCount = 0;
+
           for (const tracker of trackers) {
             const dailyTarget = safeNumber(dailyTargetByTracker.get(tracker.id) || 0);
             const stats = dailyStatsByTracker.get(tracker.id);
             const stat = stats ? stats.get(dayKey) : null;
             const actual = dailyActualValue(tracker, stat);
+
             if (actual > 0) {
               anyActivity = true;
               activityCount += 1;
             }
+
             if (dailyTarget <= 0) continue;
             expected += dailyTarget;
             done += Math.min(actual, dailyTarget);
-            if (actual >= dailyTarget && actual > 0) {
-              doneCount += 1;
-            } else if (actual > 0) {
-              partialCount += 1;
-            }
           }
+
           const percent = expected > 0 ? Math.round((done / expected) * 100) : 0;
           progressSeries.push(percent);
           if (expected > 0) {
@@ -2505,16 +2357,11 @@
             progressDays += 1;
           }
           totalCompletions += activityCount;
-          const hadActivity = doneCount > 0 || partialCount > 0 || anyActivity;
-          if (hadActivity) activeDays += 1;
-          if ((expected > 0 || hadActivity) && percent > bestDayValue) {
+          if (anyActivity) activeDays += 1;
+          if ((expected > 0 || anyActivity) && percent > bestDayValue) {
             bestDayValue = percent;
             bestDayIndex = day;
           }
-          activityCounts.push(activityCount);
-          missingCounts.push(Math.max(trackers.length - activityCount, 0));
-          doneCounts.push(doneCount);
-          partialCounts.push(partialCount);
         }
 
         const avgProgress = progressDays ? Math.round(progressSum / progressDays) : 0;
@@ -2534,185 +2381,8 @@
           ui.monthBestDay.textContent = "Лучший: —";
         }
         ui.monthProgressStat.textContent = avgProgressLabel;
-        const weekCount = Math.ceil(daysInMonth / 7);
-        ui.monthlyTableStat.textContent = `${daysInMonth} дней · ${weekCount} недели`;
         ui.monthlyChartStat.textContent = progressDays ? `${avgProgress}% средний` : "нет целей";
         if (ui.monthNextBtn) ui.monthNextBtn.disabled = safeNumber(state.monthOffset || 0) >= 0;
-
-        ui.monthlyTable.innerHTML = "";
-        const totalColumns = weekCount * 7;
-        const isNarrow = window.matchMedia ? window.matchMedia("(max-width: 720px)").matches : window.innerWidth <= 720;
-        const gap = isNarrow ? 1 : 2;
-        const minDay = isNarrow ? 6 : 8;
-        const maxDay = isNarrow ? 10 : 12;
-        const minName = isNarrow ? 92 : 140;
-        const maxName = isNarrow ? 140 : 200;
-
-        const layout = ui.monthlyTable;
-        const gridWrap = document.createElement("div");
-        gridWrap.className = "monthly-grid-wrap";
-        const grid = document.createElement("div");
-        grid.className = "monthly-grid";
-        gridWrap.appendChild(grid);
-        const analysis = document.createElement("div");
-        analysis.className = "monthly-analysis";
-        layout.appendChild(gridWrap);
-        layout.appendChild(analysis);
-
-        const fallbackWidth = Math.max(window.innerWidth - 40, 280);
-        const gridWidth = gridWrap.getBoundingClientRect().width || fallbackWidth;
-        let nameWidth = Math.round(clamp(gridWidth * 0.28, minName, maxName));
-        let available = gridWidth - nameWidth - gap * totalColumns;
-        let daySize = Math.floor(available / totalColumns);
-
-        if (!Number.isFinite(daySize) || daySize <= 0) daySize = minDay;
-        if (daySize < minDay) {
-          daySize = minDay;
-          const leftover = gridWidth - gap * totalColumns - daySize * totalColumns;
-          nameWidth = Math.round(clamp(leftover, minName, maxName));
-          available = gridWidth - nameWidth - gap * totalColumns;
-          daySize = Math.max(4, Math.floor(available / totalColumns));
-        }
-        daySize = clamp(daySize, minDay, maxDay);
-
-        grid.style.setProperty("--month-day", `${daySize}px`);
-        grid.style.setProperty("--month-gap", `${gap}px`);
-        const gridTemplate = `${nameWidth}px repeat(${totalColumns}, ${daySize}px)`;
-        const compactMode = daySize <= 8;
-        const ultraCompact = daySize <= 6;
-
-        grid.classList.toggle("compact", compactMode);
-        grid.classList.toggle("ultra", ultraCompact);
-
-        const weekRow = document.createElement("div");
-        weekRow.className = "monthly-grid-row week-header";
-        weekRow.style.gridTemplateColumns = gridTemplate;
-        const weekHead = document.createElement("div");
-        weekHead.className = "monthly-head";
-        weekHead.textContent = "Посаженные привычки";
-        weekRow.appendChild(weekHead);
-        for (let week = 0; week < weekCount; week += 1) {
-          const weekCell = document.createElement("div");
-          weekCell.className = `week-label week-${week + 1}`;
-          weekCell.style.gridColumn = "span 7";
-          weekCell.textContent = `Неделя ${week + 1}`;
-          weekRow.appendChild(weekCell);
-        }
-        grid.appendChild(weekRow);
-
-
-        for (const tracker of trackers) {
-          const row = document.createElement("div");
-          row.className = "monthly-grid-row habit-row";
-          row.style.gridTemplateColumns = gridTemplate;
-
-          const nameCell = document.createElement("div");
-          nameCell.className = "habit-cell";
-          const name = document.createElement("div");
-          name.className = "name";
-          name.textContent = tracker.name;
-          const meta = document.createElement("div");
-          meta.className = "meta";
-          const goalInfo = goalInfoByTracker.get(tracker.id);
-          const unit = tracker.unit ? String(tracker.unit) : "";
-          if (goalInfo && safeNumber(goalInfo.target || 0) > 0) {
-            const period = periodLabel(goalInfo.period);
-            meta.textContent = `${trackerTypeLabel(tracker)} · ${formatGoalNumber(goalInfo.target)}${unit}${period ? `/${period}` : ""}`;
-          } else {
-            meta.textContent = `${trackerTypeLabel(tracker)} · без цели`;
-          }
-          nameCell.appendChild(name);
-          nameCell.appendChild(meta);
-          row.appendChild(nameCell);
-
-          const stats = dailyStatsByTracker.get(tracker.id);
-          const dailyTarget = safeNumber(dailyTargetByTracker.get(tracker.id) || 0);
-
-          for (let col = 0; col < totalColumns; col += 1) {
-            const cell = document.createElement("div");
-            cell.className = `day-cell week-${Math.floor(col / 7) + 1}`;
-            const day = col + 1;
-            if (day > daysInMonth) {
-              cell.classList.add("empty");
-              row.appendChild(cell);
-              continue;
-            }
-            const date = new Date(Date.UTC(monthCtx.year, monthCtx.monthIndex, day));
-            const dayKey = dateToKey(date);
-            const stat = stats ? stats.get(dayKey) : null;
-            const actual = dailyActualValue(tracker, stat);
-            if (actual > 0) {
-              if (dailyTarget > 0 && actual < dailyTarget) cell.classList.add("partial");
-              else cell.classList.add("done");
-            }
-            if (safeNumber(state.monthOffset || 0) === 0 && dayKey > todayKey && actual <= 0) {
-              cell.classList.add("empty");
-            }
-            if (dailyTarget > 0) {
-              const ratioPercent = Math.round(clamp((actual / dailyTarget) * 100, 0, 140));
-              cell.title = `${tracker.name} · ${dayKey}: ${formatGoalNumber(actual)}${unit} / ${formatGoalNumber(
-                dailyTarget
-              )}${unit} (${ratioPercent}%)`;
-            } else if (actual > 0) {
-              cell.title = `${tracker.name} · ${dayKey}: ${formatGoalNumber(actual)}${unit}`;
-            } else {
-              cell.title = `${tracker.name} · ${dayKey}`;
-            }
-            row.appendChild(cell);
-          }
-          grid.appendChild(row);
-        }
-
-        // Footer rows removed per UI request.
-
-        const analysisHead = document.createElement("div");
-        analysisHead.className = "analysis-head";
-        analysisHead.innerHTML = "<span>Анализ</span><span>Прогресс</span>";
-        analysis.appendChild(analysisHead);
-
-        const analysisList = document.createElement("div");
-        analysisList.className = "analysis-list";
-        const analysisRows = trackers.map((tracker) => {
-          const stats = dailyStatsByTracker.get(tracker.id);
-          const goalInfo = goalInfoByTracker.get(tracker.id);
-          const actual = stats ? rangeAggregate(tracker, stats, monthCtx.startKey, monthCtx.endKey) : 0;
-          const target = monthlyTargetValue(tracker, goalInfo, monthCtx);
-          const percent = target > 0 ? Math.round((actual / target) * 100) : 0;
-          return { tracker, actual, target, percent };
-        });
-        analysisRows.sort((a, b) => b.percent - a.percent);
-
-        for (const rowData of analysisRows) {
-          const row = document.createElement("div");
-          row.className = "analysis-row";
-          const name = document.createElement("div");
-          name.className = "analysis-name";
-          name.textContent = shorten(rowData.tracker.name, 20);
-          const unit = rowData.tracker.unit ? String(rowData.tracker.unit) : "";
-          const value = document.createElement("div");
-          value.className = "analysis-value";
-          if (rowData.target > 0) {
-            value.textContent = `${formatGoalNumber(rowData.actual)}${unit} / ${formatGoalNumber(rowData.target)}${unit}`;
-          } else {
-            value.textContent = `${formatGoalNumber(rowData.actual)}${unit}`;
-          }
-          const bar = document.createElement("div");
-          bar.className = "analysis-bar";
-          const barFill = document.createElement("span");
-          barFill.style.width = `${clamp(rowData.percent, 0, 100)}%`;
-          bar.appendChild(barFill);
-
-          const metric = document.createElement("div");
-          metric.className = "analysis-metric";
-          metric.appendChild(value);
-          metric.appendChild(bar);
-
-          row.title = rowData.target > 0 ? `${rowData.tracker.name}: ${rowData.percent}%` : `${rowData.tracker.name}: без цели`;
-          row.appendChild(name);
-          row.appendChild(metric);
-          analysisList.appendChild(row);
-        }
-        analysis.appendChild(analysisList);
 
         const labels = Array.from({ length: daysInMonth }, (_v, idx) => String(idx + 1));
         renderMonthlyChart(labels, progressSeries);
