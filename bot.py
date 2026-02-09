@@ -48,6 +48,9 @@ from google.oauth2.credentials import Credentials
 from models import (
     Base,
     CoachMessage,
+    FranklinMark,
+    FranklinSettings,
+    FranklinVirtue,
     JournalEntry,
     JournalMessage,
     JournalWeeklyReport,
@@ -206,6 +209,47 @@ JOURNAL_PAGE_SIZE = 7
 REPORT_PAGE_SIZE = 5
 EVENING_DIARY_TRIGGER_WINDOW = dt.timedelta(hours=4)
 JOURNAL_ACK_DEBOUNCE_SEC = 1.5
+
+FRANKLIN_DEFAULT_VIRTUES: list[tuple[str, str]] = [
+    ("Воздержание", "Есть не до пресыщения, пить не до опьянения."),
+    (
+        "Молчание",
+        "Говорить только то, что может принести пользу мне или другому; избегать пустых разговоров.",
+    ),
+    ("Порядок", "Держать все свои вещи на местах; для каждого занятия есть свое время."),
+    (
+        "Решительность",
+        "Решаться выполнять то, что должно сделать; неукоснительно выполнять то, что решено.",
+    ),
+    (
+        "Бережливость",
+        "Тратить деньги только на то, что приносит благо мне или другим; то есть ничего не расточать.",
+    ),
+    (
+        "Трудолюбие",
+        "Не терять времени попусту; быть всегда занятым чем-либо полезным; отказываться от всех ненужных действий.",
+    ),
+    (
+        "Искренность",
+        "Не причинять вредного обмана; иметь чистые и справедливые мысли; в разговоре также придерживаться этого правила.",
+    ),
+    (
+        "Справедливость",
+        "Не причинять никому вреда; не совершать несправедливостей и не опускать добрых дел, которые входят в число твоих обязанностей.",
+    ),
+    (
+        "Умеренность",
+        "Избегать крайностей; сдерживать, насколько ты считаешь это уместным, чувство обиды от несправедливостей.",
+    ),
+    ("Чистота", "Не допускать телесной нечистоты; соблюдать опрятность в одежде и жилище."),
+    ("Спокойствие", "Не волноваться по пустякам и по поводу обычных или неизбежных случаев."),
+    (
+        "Целомудрие",
+        "Совокупляйся не часто, только ради здоровья или произведения потомства, "
+        "никогда не делай этого до отупения, истощения или в ущерб своей или чужой репутации.",
+    ),
+    ("Смирение", "Подражай Иисусу и Сократу."),
+]
 
 
 # ----------------------------
@@ -1988,6 +2032,217 @@ def add_tracker(
     return tracker_id
 
 
+def franklin_week_start(date: dt.date) -> dt.date:
+    # ISO week starts on Monday
+    return date - dt.timedelta(days=date.weekday())
+
+
+def _encode_ymd(date: dt.date) -> str:
+    return date.strftime("%Y%m%d")
+
+
+def _decode_ymd(raw: str) -> Optional[dt.date]:
+    text = (raw or "").strip()
+    if not re.match(r"^\d{8}$", text):
+        return None
+    try:
+        return dt.date(int(text[:4]), int(text[4:6]), int(text[6:8]))
+    except ValueError:
+        return None
+
+
+def get_franklin_settings(user_id: int) -> Optional[FranklinSettings]:
+    with db_session() as session:
+        return (
+            session.query(FranklinSettings)
+            .filter(FranklinSettings.user_id == user_id)
+            .one_or_none()
+        )
+
+
+def list_franklin_virtues(user_id: int) -> list[FranklinVirtue]:
+    with db_session() as session:
+        return (
+            session.query(FranklinVirtue)
+            .filter(FranklinVirtue.user_id == user_id, FranklinVirtue.active.is_(True))
+            .order_by(FranklinVirtue.order.asc(), FranklinVirtue.id.asc())
+            .all()
+        )
+
+
+def get_franklin_virtue_for_user(user_id: int, virtue_id: int) -> Optional[FranklinVirtue]:
+    with db_session() as session:
+        virtue = session.get(FranklinVirtue, virtue_id)
+        if not virtue or virtue.user_id != user_id or virtue.active is False:
+            return None
+        return virtue
+
+
+def ensure_franklin_setup(user: User) -> FranklinSettings:
+    """Create Franklin tables for user if missing (settings + 13 virtues)."""
+    today = today_iso(user.tz)
+    default_week = franklin_week_start(today)
+    now = _utcnow()
+    with db_session() as session:
+        settings = (
+            session.query(FranklinSettings)
+            .filter(FranklinSettings.user_id == user.id)
+            .one_or_none()
+        )
+        if not settings:
+            settings = FranklinSettings(
+                user_id=user.id,
+                cycle_start_week=default_week,
+                enabled=True,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(settings)
+            session.flush()
+        else:
+            if settings.cycle_start_week is None:
+                settings.cycle_start_week = default_week
+            settings.enabled = True if settings.enabled is None else settings.enabled
+            settings.updated_at = now
+        virtues = (
+            session.query(FranklinVirtue)
+            .filter(FranklinVirtue.user_id == user.id)
+            .order_by(FranklinVirtue.order.asc(), FranklinVirtue.id.asc())
+            .all()
+        )
+        if not virtues:
+            for idx, (title, desc) in enumerate(FRANKLIN_DEFAULT_VIRTUES, start=1):
+                session.add(
+                    FranklinVirtue(
+                        user_id=user.id,
+                        order=idx,
+                        title=title,
+                        description=desc,
+                        active=True,
+                        created_at=now,
+                    )
+                )
+            session.flush()
+        return settings
+
+
+def franklin_focus_order(settings: FranklinSettings, week_start: dt.date) -> int:
+    start = settings.cycle_start_week or week_start
+    weeks_since = int((week_start - start).days // 7)
+    return (weeks_since % 13) + 1
+
+
+def list_franklin_marks_for_week(user_id: int, week_start: dt.date) -> set[tuple[int, dt.date]]:
+    week_end = week_start + dt.timedelta(days=6)
+    with db_session() as session:
+        rows = (
+            session.query(FranklinMark.virtue_id, FranklinMark.date)
+            .filter(
+                FranklinMark.user_id == user_id,
+                FranklinMark.date >= week_start,
+                FranklinMark.date <= week_end,
+            )
+            .all()
+        )
+    return {(int(r[0]), r[1]) for r in rows}
+
+
+def toggle_franklin_mark(user_id: int, virtue_id: int, date: dt.date) -> Optional[bool]:
+    """Toggle a Franklin mark. Returns new marked state, or None if invalid."""
+    now = _utcnow()
+    with db_session() as session:
+        virtue = session.get(FranklinVirtue, virtue_id)
+        if not virtue or virtue.user_id != user_id or virtue.active is False:
+            return None
+        existing = (
+            session.query(FranklinMark)
+            .filter(
+                FranklinMark.user_id == user_id,
+                FranklinMark.virtue_id == virtue_id,
+                FranklinMark.date == date,
+            )
+            .one_or_none()
+        )
+        if existing:
+            session.delete(existing)
+            return False
+        session.add(
+            FranklinMark(
+                user_id=user_id,
+                virtue_id=virtue_id,
+                date=date,
+                created_at=now,
+            )
+        )
+        session.flush()
+        return True
+
+
+def count_franklin_marks_for_virtue(user_id: int, virtue_id: int, week_start: dt.date) -> int:
+    week_end = week_start + dt.timedelta(days=6)
+    with db_session() as session:
+        return (
+            session.query(func.count(FranklinMark.id))
+            .filter(
+                FranklinMark.user_id == user_id,
+                FranklinMark.virtue_id == virtue_id,
+                FranklinMark.date >= week_start,
+                FranklinMark.date <= week_end,
+            )
+            .scalar()
+            or 0
+        )
+
+
+def update_franklin_cycle_start(user_id: int, cycle_start_week: dt.date) -> None:
+    now = _utcnow()
+    with db_session() as session:
+        settings = (
+            session.query(FranklinSettings)
+            .filter(FranklinSettings.user_id == user_id)
+            .one_or_none()
+        )
+        if not settings:
+            settings = FranklinSettings(
+                user_id=user_id,
+                cycle_start_week=cycle_start_week,
+                enabled=True,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(settings)
+            return
+        settings.cycle_start_week = cycle_start_week
+        settings.enabled = True
+        settings.updated_at = now
+
+
+def update_franklin_virtue(
+    user_id: int,
+    virtue_id: int,
+    *,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+) -> bool:
+    now = _utcnow()
+    with db_session() as session:
+        virtue = session.get(FranklinVirtue, virtue_id)
+        if not virtue or virtue.user_id != user_id or virtue.active is False:
+            return False
+        if title is not None:
+            virtue.title = title
+        if description is not None:
+            virtue.description = description
+        settings = (
+            session.query(FranklinSettings)
+            .filter(FranklinSettings.user_id == user_id)
+            .one_or_none()
+        )
+        if settings:
+            settings.updated_at = now
+        return True
+
+
 def tracker_progress(tracker_id: int, date: dt.date) -> Tuple[float, bool]:
     with db_session() as session:
         total, partial_int = (
@@ -2584,6 +2839,7 @@ def main_reply_kb(tg_id: Optional[int] = None) -> ReplyKeyboardMarkup:
             KeyboardButton(text="🗒 Дневник"),
         ],
         [
+            KeyboardButton(text="🧭 Добродетели"),
             KeyboardButton(text="🏆 Лидерборд"),
             KeyboardButton(text="⚙️ Настройки"),
         ],
@@ -3348,6 +3604,12 @@ class TrackerStates(StatesGroup):
     retro_day = State()
 
 
+class VirtueStates(StatesGroup):
+    edit_title = State()
+    edit_description = State()
+    set_cycle_start = State()
+
+
 class JournalStates(StatesGroup):
     collecting = State()
 
@@ -3486,6 +3748,194 @@ def render_retro_view(user: User, date: dt.date) -> tuple[str, InlineKeyboardMar
     kb_rows.append([InlineKeyboardButton(text="📅 Другой день", callback_data="tracker:retro_menu")])
     kb_rows.append([InlineKeyboardButton(text="⬅️ Трекеры", callback_data="tracker:retro_exit")])
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    return "\n".join(lines), kb
+
+
+FRANKLIN_PAGE_SIZE = 7
+
+
+def franklin_intro_text() -> str:
+    return (
+        "🧭 <b>Добродетели Франклина</b>\n"
+        "Зачем: тренировать самодисциплину и держать фокус.\n\n"
+        "Как работает:\n"
+        "• 13 добродетелей × 7 дней недели.\n"
+        "• <b>•</b> = был прокол (нарушение), пусто = удержался.\n"
+        "• Каждую неделю есть <b>фокус</b> — одна добродетель, на которую смотришь внимательнее.\n\n"
+        "Сделай: нажми «Начать» — я создам список добродетелей и открою таблицу этой недели."
+    )
+
+
+def franklin_intro_inline() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🚀 Начать", callback_data="virt:start")]]
+    )
+
+
+def _short_btn(text: str, limit: int = 12) -> str:
+    cleaned = (text or "").strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: max(0, limit - 1)].rstrip() + "…"
+
+
+def render_franklin_table(user: User, week_start: dt.date, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    settings = get_franklin_settings(user.id)
+    if not settings:
+        settings = ensure_franklin_setup(user)
+    virtues = list_franklin_virtues(user.id)
+    if not virtues:
+        settings = ensure_franklin_setup(user)
+        virtues = list_franklin_virtues(user.id)
+    week_start = franklin_week_start(week_start)
+    week_end = week_start + dt.timedelta(days=6)
+    focus_order = franklin_focus_order(settings, week_start)
+    focus_title = next((v.title for v in virtues if v.order == focus_order), f"{focus_order}/13")
+    cycle_week = focus_order
+
+    lines = [
+        "🧭 Добродетели Франклина",
+        f"Неделя: {week_start.strftime('%d.%m')}–{week_end.strftime('%d.%m')}",
+        f"Фокус: {cycle_week}/13 — {focus_title}",
+        "",
+        "• = прокол, · = ок. Нажми клетку, чтобы поставить/убрать точку.",
+    ]
+
+    marks = list_franklin_marks_for_week(user.id, week_start)
+    total = len(virtues)
+    pages = max(1, (total + FRANKLIN_PAGE_SIZE - 1) // FRANKLIN_PAGE_SIZE)
+    page = max(0, min(int(page), pages - 1))
+    subset = virtues[page * FRANKLIN_PAGE_SIZE : (page + 1) * FRANKLIN_PAGE_SIZE]
+
+    today = today_iso(user.tz)
+    week_key = _encode_ymd(week_start)
+
+    day_labels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    header = [
+        InlineKeyboardButton(text=f"W{cycle_week}/13", callback_data=f"virt:settings:{week_key}:{page}")
+    ]
+    for i, label in enumerate(day_labels):
+        d = week_start + dt.timedelta(days=i)
+        header.append(
+            InlineKeyboardButton(
+                text=label + ("🟨" if d == today else ""),
+                callback_data="virt:noop",
+            )
+        )
+
+    kb_rows: list[list[InlineKeyboardButton]] = [header]
+
+    for virtue in subset:
+        is_focus = virtue.order == focus_order
+        prefix = "⭐" if is_focus else ""
+        left = f"{prefix}{virtue.order}. {_short_btn(virtue.title, 10)}"
+        row = [
+            InlineKeyboardButton(
+                text=left,
+                callback_data=f"virt:card:{virtue.id}:{week_key}:{page}",
+            )
+        ]
+        for i in range(7):
+            d = week_start + dt.timedelta(days=i)
+            marked = (virtue.id, d) in marks
+            row.append(
+                InlineKeyboardButton(
+                    text="•" if marked else "·",
+                    callback_data=f"virt:cell:{virtue.id}:{_encode_ymd(d)}",
+                )
+            )
+        kb_rows.append(row)
+
+    # Week navigation
+    prev_key = _encode_ymd(week_start - dt.timedelta(days=7))
+    next_key = _encode_ymd(week_start + dt.timedelta(days=7))
+    kb_rows.append(
+        [
+            InlineKeyboardButton(text="⬅️ Нед", callback_data=f"virt:open:{prev_key}:{page}"),
+            InlineKeyboardButton(text="📅 Текущая", callback_data=f"virt:today:{page}"),
+            InlineKeyboardButton(text="Нед ➡️", callback_data=f"virt:open:{next_key}:{page}"),
+        ]
+    )
+    # Page navigation
+    if pages > 1:
+        prev_page = max(0, page - 1)
+        next_page = min(pages - 1, page + 1)
+        kb_rows.append(
+            [
+                InlineKeyboardButton(text="⬅️ Стр", callback_data=f"virt:open:{week_key}:{prev_page}"),
+                InlineKeyboardButton(text=f"{page+1}/{pages}", callback_data="virt:noop"),
+                InlineKeyboardButton(text="Стр ➡️", callback_data=f"virt:open:{week_key}:{next_page}"),
+            ]
+        )
+    kb_rows.append(
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data=f"virt:settings:{week_key}:{page}")]
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    return "\n".join(lines), kb
+
+
+def render_franklin_virtue_card(
+    user: User, virtue_id: int, week_start: dt.date, page: int = 0
+) -> tuple[str, InlineKeyboardMarkup]:
+    virtue = get_franklin_virtue_for_user(user.id, virtue_id)
+    if not virtue:
+        return "Добродетель не найдена.", InlineKeyboardMarkup(inline_keyboard=[])
+    settings = get_franklin_settings(user.id)
+    if not settings:
+        settings = ensure_franklin_setup(user)
+    week_start = franklin_week_start(week_start)
+    week_key = _encode_ymd(week_start)
+    focus_order = franklin_focus_order(settings, week_start)
+    is_focus = virtue.order == focus_order
+    week_marks = count_franklin_marks_for_virtue(user.id, virtue.id, week_start)
+    desc = (virtue.description or "").strip() or "(без описания)"
+    lines = [
+        f"🧭 Добродетель {virtue.order}/13" + (" ⭐ фокус недели" if is_focus else ""),
+        f"<b>{html.escape(virtue.title)}</b>",
+        "",
+        html.escape(desc),
+        "",
+        f"Проколов на этой неделе: <b>{week_marks}</b>",
+    ]
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✏️ Название", callback_data=f"virt:edit_title:{virtue.id}:{week_key}:{page}"
+                ),
+                InlineKeyboardButton(
+                    text="✏️ Описание", callback_data=f"virt:edit_desc:{virtue.id}:{week_key}:{page}"
+                ),
+            ],
+            [InlineKeyboardButton(text="⬅️ Таблица", callback_data=f"virt:open:{week_key}:{page}")],
+        ]
+    )
+    return "\n".join(lines), kb
+
+
+def render_franklin_settings(user: User, week_start: dt.date, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    settings = get_franklin_settings(user.id)
+    if not settings:
+        settings = ensure_franklin_setup(user)
+    virtues = list_franklin_virtues(user.id)
+    week_start = franklin_week_start(week_start)
+    week_key = _encode_ymd(week_start)
+    start_week = settings.cycle_start_week or week_start
+    focus_order = franklin_focus_order(settings, week_start)
+    focus_title = next((v.title for v in virtues if v.order == focus_order), f"{focus_order}/13")
+    lines = [
+        "⚙️ Добродетели — настройки",
+        f"Старт цикла: {start_week.strftime('%d.%m.%Y')} (это неделя добродетели №1)",
+        f"Фокус на этой неделе: {focus_order}/13 — {focus_title}",
+        "",
+        "Сделай: хочешь поменять старт цикла? (можно ввести любую дату — я округлю до начала недели).",
+    ]
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📅 Изменить старт цикла", callback_data=f"virt:set_cycle:{week_key}:{page}")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"virt:open:{week_key}:{page}")],
+        ]
+    )
     return "\n".join(lines), kb
 
 
@@ -4266,6 +4716,19 @@ async def on_journal(message: Message, state: FSMContext) -> None:
         journal_menu_text(user, entry),
         reply_markup=journal_menu_inline(recent_entries),
     )
+
+
+@router.message(F.text == "🧭 Добродетели")
+async def on_franklin(message: Message, state: FSMContext) -> None:
+    user = get_or_create_user(message.from_user.id)
+    await state.clear()
+    settings = get_franklin_settings(user.id)
+    if not settings or settings.enabled is False:
+        await message.answer(franklin_intro_text(), reply_markup=franklin_intro_inline())
+        return
+    week_start = franklin_week_start(today_iso(user.tz))
+    text, kb = render_franklin_table(user, week_start, page=0)
+    await message.answer(text, reply_markup=kb)
 
 
 @router.message(F.text == "👤 Профиль")
@@ -5175,6 +5638,124 @@ def parse_tracker_payload(data: str) -> Tuple[str, Optional[int], Optional[str]]
     return action, tracker_id, extra
 
 
+async def _edit_or_send(query, text: str, kb: InlineKeyboardMarkup) -> None:
+    try:
+        await query.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        await query.message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("virt:"))
+async def franklin_cb(query, state: FSMContext) -> None:
+    user = get_or_create_user(query.from_user.id)
+    parts = query.data.split(":")
+    action = parts[1] if len(parts) > 1 else ""
+
+    if action == "noop":
+        await query.answer()
+        return
+
+    if action == "start":
+        ensure_franklin_setup(user)
+        week_start = franklin_week_start(today_iso(user.tz))
+        text, kb = render_franklin_table(user, week_start, page=0)
+        await _edit_or_send(query, text, kb)
+        await query.answer()
+        return
+
+    if action == "today":
+        page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+        week_start = franklin_week_start(today_iso(user.tz))
+        text, kb = render_franklin_table(user, week_start, page=page)
+        await _edit_or_send(query, text, kb)
+        await query.answer()
+        return
+
+    if action == "open":
+        week_raw = parts[2] if len(parts) > 2 else ""
+        page = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0
+        week_start = _decode_ymd(week_raw) or franklin_week_start(today_iso(user.tz))
+        text, kb = render_franklin_table(user, week_start, page=page)
+        await _edit_or_send(query, text, kb)
+        await query.answer()
+        return
+
+    if action == "cell":
+        virtue_id = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+        date = _decode_ymd(parts[3]) if len(parts) > 3 else None
+        if not virtue_id or not date:
+            await query.answer()
+            return
+        if date > today_iso(user.tz):
+            await query.answer("Будущие даты пока нельзя отмечать.", show_alert=False)
+            return
+        new_state = toggle_franklin_mark(user.id, virtue_id, date)
+        if new_state is None:
+            await query.answer("Добродетель не найдена.", show_alert=False)
+            return
+        virtue = get_franklin_virtue_for_user(user.id, virtue_id)
+        page = (int(virtue.order) - 1) // FRANKLIN_PAGE_SIZE if virtue else 0
+        week_start = franklin_week_start(date)
+        text, kb = render_franklin_table(user, week_start, page=page)
+        await _edit_or_send(query, text, kb)
+        await query.answer("• Прокол" if new_state else "Убрано ✅", show_alert=False)
+        return
+
+    if action == "card":
+        virtue_id = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+        week_start = _decode_ymd(parts[3]) if len(parts) > 3 else None
+        page = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
+        if not virtue_id or not week_start:
+            await query.answer()
+            return
+        text, kb = render_franklin_virtue_card(user, virtue_id, week_start, page=page)
+        await _edit_or_send(query, text, kb)
+        await query.answer()
+        return
+
+    if action == "settings":
+        week_start = _decode_ymd(parts[2]) if len(parts) > 2 else None
+        page = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0
+        week_start = week_start or franklin_week_start(today_iso(user.tz))
+        text, kb = render_franklin_settings(user, week_start, page=page)
+        await _edit_or_send(query, text, kb)
+        await query.answer()
+        return
+
+    if action == "set_cycle":
+        week_start = _decode_ymd(parts[2]) if len(parts) > 2 else None
+        page = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0
+        week_start = week_start or franklin_week_start(today_iso(user.tz))
+        await state.set_state(VirtueStates.set_cycle_start)
+        await state.update_data(fr_week=_encode_ymd(week_start), fr_page=page)
+        await query.message.answer(
+            "Введи дату старта цикла (DD.MM.YYYY или YYYY-MM-DD).\n"
+            "Можно ввести любую дату — я округлю до начала недели (понедельник).\n"
+            "Чтобы отменить — напиши: отмена"
+        )
+        await query.answer()
+        return
+
+    if action in {"edit_title", "edit_desc"}:
+        virtue_id = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+        week_start = _decode_ymd(parts[3]) if len(parts) > 3 else None
+        page = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
+        if not virtue_id or not week_start:
+            await query.answer()
+            return
+        await state.update_data(fr_virtue_id=virtue_id, fr_week=_encode_ymd(week_start), fr_page=page)
+        if action == "edit_title":
+            await state.set_state(VirtueStates.edit_title)
+            await query.message.answer("Новое название добродетели? (1 строка)\nОтмена: напиши «отмена».")
+        else:
+            await state.set_state(VirtueStates.edit_description)
+            await query.message.answer("Новое описание? (можно несколько строк)\nОтмена: напиши «отмена».")
+        await query.answer()
+        return
+
+    await query.answer()
+
+
 @router.callback_query(F.data.startswith("tracker:"))
 async def tracker_cb(query, state: FSMContext):
     user = get_or_create_user(query.from_user.id)
@@ -5631,6 +6212,95 @@ async def tracker_custom_value(message: Message, state: FSMContext) -> None:
             await state.set_state(None)
         else:
             await state.clear()
+
+
+@router.message(VirtueStates.edit_title)
+async def virtue_edit_title(message: Message, state: FSMContext) -> None:
+    user = get_or_create_user(message.from_user.id)
+    data = await state.get_data()
+    virtue_id = data.get("fr_virtue_id")
+    week_raw = data.get("fr_week")
+    page = int(data.get("fr_page") or 0)
+    week_start = _decode_ymd(str(week_raw or "")) or franklin_week_start(today_iso(user.tz))
+    if not virtue_id:
+        await state.clear()
+        await message.answer("Не могу найти добродетель. Открой таблицу заново.")
+        return
+    raw = (message.text or "").strip()
+    if raw.lower() in {"отмена", "cancel", "назад", "back"}:
+        await state.clear()
+        text, kb = render_franklin_virtue_card(user, int(virtue_id), week_start, page=page)
+        await message.answer(text, reply_markup=kb)
+        return
+    title = raw[:80].strip()
+    if not title:
+        await message.answer("Название не может быть пустым. Напиши ещё раз или «отмена».")
+        return
+    ok = update_franklin_virtue(user.id, int(virtue_id), title=title)
+    await state.clear()
+    if not ok:
+        await message.answer("Добродетель не найдена.")
+        return
+    text, kb = render_franklin_virtue_card(user, int(virtue_id), week_start, page=page)
+    await message.answer("Сохранено ✅")
+    await message.answer(text, reply_markup=kb)
+
+
+@router.message(VirtueStates.edit_description)
+async def virtue_edit_description(message: Message, state: FSMContext) -> None:
+    user = get_or_create_user(message.from_user.id)
+    data = await state.get_data()
+    virtue_id = data.get("fr_virtue_id")
+    week_raw = data.get("fr_week")
+    page = int(data.get("fr_page") or 0)
+    week_start = _decode_ymd(str(week_raw or "")) or franklin_week_start(today_iso(user.tz))
+    if not virtue_id:
+        await state.clear()
+        await message.answer("Не могу найти добродетель. Открой таблицу заново.")
+        return
+    raw = (message.text or "").strip()
+    if raw.lower() in {"отмена", "cancel", "назад", "back"}:
+        await state.clear()
+        text, kb = render_franklin_virtue_card(user, int(virtue_id), week_start, page=page)
+        await message.answer(text, reply_markup=kb)
+        return
+    desc = raw[:1200].strip()
+    if not desc:
+        await message.answer("Описание не может быть пустым. Напиши ещё раз или «отмена».")
+        return
+    ok = update_franklin_virtue(user.id, int(virtue_id), description=desc)
+    await state.clear()
+    if not ok:
+        await message.answer("Добродетель не найдена.")
+        return
+    text, kb = render_franklin_virtue_card(user, int(virtue_id), week_start, page=page)
+    await message.answer("Сохранено ✅")
+    await message.answer(text, reply_markup=kb)
+
+
+@router.message(VirtueStates.set_cycle_start)
+async def virtue_set_cycle_start(message: Message, state: FSMContext) -> None:
+    user = get_or_create_user(message.from_user.id)
+    data = await state.get_data()
+    week_raw = data.get("fr_week")
+    page = int(data.get("fr_page") or 0)
+    return_week = _decode_ymd(str(week_raw or "")) or franklin_week_start(today_iso(user.tz))
+    raw = (message.text or "").strip()
+    if raw.lower() in {"отмена", "cancel", "назад", "back"}:
+        await state.clear()
+        text, kb = render_franklin_settings(user, return_week, page=page)
+        await message.answer(text, reply_markup=kb)
+        return
+    parsed = parse_date_input(raw, user.tz)
+    if not parsed:
+        await message.answer("Не смог распознать дату. Пример: 03.02.2026 или 2026-02-03. (или «отмена»)")
+        return
+    start_week = franklin_week_start(parsed)
+    update_franklin_cycle_start(user.id, start_week)
+    await state.clear()
+    text, kb = render_franklin_table(user, return_week, page=page)
+    await message.answer(f"Сохранено ✅ Старт цикла: {start_week.strftime('%d.%m.%Y')}")
+    await message.answer(text, reply_markup=kb)
 
 
 @router.message(TrackerStates.edit_name)

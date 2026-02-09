@@ -188,3 +188,46 @@ class TrackerGoalDisplay(Base):
     tracker_id = Column(Integer, ForeignKey("trackers.id"), nullable=False)
     period = Column(String(16), server_default="week", nullable=False)
     format = Column(String(16), server_default="progress_goal", nullable=False)
+
+
+class FranklinSettings(Base):
+    __tablename__ = "franklin_settings"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_franklin_settings_user"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    cycle_start_week = Column(Date, nullable=False)
+    enabled = Column(Boolean, server_default="true", nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class FranklinVirtue(Base):
+    __tablename__ = "franklin_virtues"
+    __table_args__ = (
+        UniqueConstraint("user_id", "order", name="uq_franklin_virtues_user_order"),
+        Index("idx_franklin_virtues_user_active", "user_id", "active"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    order = Column(Integer, nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, server_default="", nullable=False)
+    active = Column(Boolean, server_default="true", nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class FranklinMark(Base):
+    __tablename__ = "franklin_marks"
+    __table_args__ = (
+        UniqueConstraint("virtue_id", "date", name="uq_franklin_mark_virtue_date"),
+        Index("idx_franklin_marks_user_date", "user_id", "date"),
+        Index("idx_franklin_marks_virtue_date", "virtue_id", "date"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    virtue_id = Column(Integer, ForeignKey("franklin_virtues.id"), nullable=False, index=True)
+    date = Column(Date, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
