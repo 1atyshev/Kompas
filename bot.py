@@ -8,6 +8,7 @@ import html
 import io
 import json
 import os
+import random
 import re
 import secrets
 import sqlite3
@@ -259,6 +260,7 @@ def init_db() -> None:
     Base.metadata.create_all(engine)
     ensure_user_columns()
     ensure_tracker_columns()
+    ensure_franklin_columns()
     normalize_tracker_booleans()
     ensure_journal_columns()
 
@@ -416,6 +418,32 @@ def ensure_journal_columns() -> None:
         statements.append(
             "ALTER TABLE journal_entries ADD COLUMN auto_closed BOOLEAN DEFAULT FALSE"
         )
+    if statements:
+        with engine.begin() as conn:
+            for stmt in statements:
+                conn.execute(text(stmt))
+
+
+def ensure_franklin_columns() -> None:
+    inspector = inspect(engine)
+    if "franklin_settings" not in inspector.get_table_names():
+        return
+    existing = {col["name"] for col in inspector.get_columns("franklin_settings")}
+    statements = []
+    if "reminder_date" not in existing:
+        statements.append("ALTER TABLE franklin_settings ADD COLUMN reminder_date DATE")
+    if "reminder_morning_time" not in existing:
+        statements.append("ALTER TABLE franklin_settings ADD COLUMN reminder_morning_time VARCHAR(5)")
+    if "reminder_day_time" not in existing:
+        statements.append("ALTER TABLE franklin_settings ADD COLUMN reminder_day_time VARCHAR(5)")
+    if "reminder_evening_time" not in existing:
+        statements.append("ALTER TABLE franklin_settings ADD COLUMN reminder_evening_time VARCHAR(5)")
+    if "reminder_morning_last_date" not in existing:
+        statements.append("ALTER TABLE franklin_settings ADD COLUMN reminder_morning_last_date DATE")
+    if "reminder_day_last_date" not in existing:
+        statements.append("ALTER TABLE franklin_settings ADD COLUMN reminder_day_last_date DATE")
+    if "reminder_evening_last_date" not in existing:
+        statements.append("ALTER TABLE franklin_settings ADD COLUMN reminder_evening_last_date DATE")
     if statements:
         with engine.begin() as conn:
             for stmt in statements:
@@ -2157,6 +2185,99 @@ def list_franklin_marked_virtues_for_date(user_id: int, date: dt.date) -> set[in
     return {int(r[0]) for r in rows}
 
 
+def list_franklin_enabled_users() -> list[tuple[User, FranklinSettings]]:
+    with db_session() as session:
+        rows = (
+            session.query(User, FranklinSettings)
+            .join(FranklinSettings, FranklinSettings.user_id == User.id)
+            .filter(FranklinSettings.enabled.is_(True))
+            .all()
+        )
+    return [(row[0], row[1]) for row in rows]
+
+
+def franklin_focus_title_for_week(user_id: int, settings: FranklinSettings, week_start: dt.date) -> str:
+    focus_order = franklin_focus_order(settings, week_start)
+    virtues = list_franklin_virtues(user_id)
+    return next((v.title for v in virtues if v.order == focus_order), f"{focus_order}/13")
+
+
+def _rand_time_in_window(start_h: int, start_m: int, end_h: int, end_m: int) -> str:
+    start = start_h * 60 + start_m
+    end = end_h * 60 + end_m
+    if end <= start:
+        end = start + 1
+    minute = random.randint(start, end)
+    h, m = divmod(minute, 60)
+    return f"{h:02d}:{m:02d}"
+
+
+def ensure_franklin_daily_schedule(user_id: int, local_date: dt.date) -> Optional[tuple[str, str, str]]:
+    """Ensure random reminder times are generated for the given local date."""
+    now = _utcnow()
+    with db_session() as session:
+        settings = (
+            session.query(FranklinSettings)
+            .filter(FranklinSettings.user_id == user_id)
+            .one_or_none()
+        )
+        if not settings or settings.enabled is False:
+            return None
+        if settings.reminder_date != local_date or not settings.reminder_morning_time or not settings.reminder_day_time:
+            morning = _rand_time_in_window(8, 30, 11, 30)
+            day = _rand_time_in_window(12, 30, 17, 30)
+            # avoid equality; push day by +1 minute if needed
+            if day == morning:
+                hh, mm = map(int, day.split(":"))
+                mm = (mm + 1) % 60
+                day = f"{hh:02d}:{mm:02d}"
+
+            settings.reminder_date = local_date
+            settings.reminder_morning_time = morning
+            settings.reminder_day_time = day
+            settings.reminder_morning_last_date = None
+            settings.reminder_day_last_date = None
+            # evening slot is used only if user has no evening checkin; optional
+            settings.reminder_evening_time = settings.reminder_evening_time or _rand_time_in_window(19, 0, 22, 0)
+            settings.reminder_evening_last_date = settings.reminder_evening_last_date
+            settings.updated_at = now
+        return (
+            str(settings.reminder_morning_time or ""),
+            str(settings.reminder_day_time or ""),
+            str(settings.reminder_evening_time or ""),
+        )
+
+
+def mark_franklin_reminder_sent(user_id: int, slot: str, local_date: dt.date) -> None:
+    now = _utcnow()
+    with db_session() as session:
+        settings = (
+            session.query(FranklinSettings)
+            .filter(FranklinSettings.user_id == user_id)
+            .one_or_none()
+        )
+        if not settings:
+            return
+        if slot == "morning":
+            settings.reminder_morning_last_date = local_date
+        elif slot == "day":
+            settings.reminder_day_last_date = local_date
+        elif slot == "evening":
+            settings.reminder_evening_last_date = local_date
+        settings.updated_at = now
+
+
+def franklin_reminder_inline(date: dt.date) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📅 Сегодня (добродетели)", callback_data=f"virt:day:{_encode_ymd(date)}:0"),
+                InlineKeyboardButton(text="📊 Таблица недели", callback_data=f"virt:open:{_encode_ymd(franklin_week_start(date))}:0"),
+            ]
+        ]
+    )
+
+
 def toggle_franklin_mark(user_id: int, virtue_id: int, date: dt.date) -> Optional[bool]:
     """Toggle a Franklin mark. Returns new marked state, or None if invalid."""
     now = _utcnow()
@@ -2927,6 +3048,18 @@ def mission_inline(status: str) -> InlineKeyboardMarkup:
 def evening_checkin_inline(user_tg_id: int) -> InlineKeyboardMarkup:
     _, kb = render_today_view(user_tg_id)
     rows = list(kb.inline_keyboard)
+    user = get_or_create_user(user_tg_id)
+    settings = get_franklin_settings(user.id)
+    if settings and settings.enabled is True:
+        today = today_iso(user.tz)
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🧭 Добродетели (сегодня)",
+                    callback_data=f"virt:day:{_encode_ymd(today)}:0",
+                )
+            ]
+        )
     rows.append([InlineKeyboardButton(text="🗒 Перейти к дневнику", callback_data="journal:start")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -7065,6 +7198,68 @@ async def reminders_loop(bot: Bot, dp: Dispatcher, bot_id: int) -> None:
                 mark_checkin_sent(user.id, "evening", local_date)
             except Exception:
                 pass
+
+        # Franklin virtues reminders (random morning + day; evening piggybacks on evening check-in when enabled).
+        for user, settings in list_franklin_enabled_users():
+            offset = dt.timedelta(minutes=_tz_offset_minutes(user.tz))
+            local_dt = now_utc + offset
+            local_date = local_dt.date()
+            local_time = local_dt.strftime("%H:%M")
+
+            schedule = ensure_franklin_daily_schedule(user.id, local_date)
+            if not schedule:
+                continue
+            morning_time, day_time, evening_time = schedule
+
+            # Don't interrupt active flows.
+            key = StorageKey(bot_id=bot_id, chat_id=user.tg_id, user_id=user.tg_id)
+            current_state = await dp.storage.get_state(key=key)
+            if current_state:
+                continue
+
+            week_start = franklin_week_start(local_date)
+            focus_order = franklin_focus_order(settings, week_start)
+            focus_title = franklin_focus_title_for_week(user.id, settings, week_start)
+
+            if local_time == morning_time and settings.reminder_morning_last_date != local_date:
+                try:
+                    await bot.send_message(
+                        user.tg_id,
+                        "🧭 Добродетели Франклина\n"
+                        f"Фокус недели: {focus_order}/13 — {focus_title}\n\n"
+                        "Утро: держи фокус. Если будет прокол — отметь ❌, чтобы не расплываться вниманием.",
+                        reply_markup=franklin_reminder_inline(local_date),
+                    )
+                    mark_franklin_reminder_sent(user.id, "morning", local_date)
+                except Exception:
+                    pass
+
+            if local_time == day_time and settings.reminder_day_last_date != local_date:
+                try:
+                    await bot.send_message(
+                        user.tg_id,
+                        "🧭 Добродетели Франклина\n"
+                        f"Фокус недели: {focus_order}/13 — {focus_title}\n\n"
+                        "День: короткая проверка. Был прокол? Отметь ❌ — это не провал, а честная фиксация.",
+                        reply_markup=franklin_reminder_inline(local_date),
+                    )
+                    mark_franklin_reminder_sent(user.id, "day", local_date)
+                except Exception:
+                    pass
+
+            # If evening check-in is disabled, send an evening virtues reminder too.
+            if not user.evening_time and evening_time and local_time == evening_time and settings.reminder_evening_last_date != local_date:
+                try:
+                    await bot.send_message(
+                        user.tg_id,
+                        "🧭 Добродетели Франклина\n"
+                        f"Фокус недели: {focus_order}/13 — {focus_title}\n\n"
+                        "Вечер: отметь проколы за день, чтобы видеть прогресс.",
+                        reply_markup=franklin_reminder_inline(local_date),
+                    )
+                    mark_franklin_reminder_sent(user.id, "evening", local_date)
+                except Exception:
+                    pass
 
         await asyncio.sleep(30)
 

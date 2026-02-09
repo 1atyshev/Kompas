@@ -198,6 +198,13 @@ class FranklinSettings(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     cycle_start_week = Column(Date, nullable=False)
     enabled = Column(Boolean, server_default="true", nullable=False)
+    reminder_date = Column(Date, nullable=True)
+    reminder_morning_time = Column(String(5), nullable=True)
+    reminder_day_time = Column(String(5), nullable=True)
+    reminder_evening_time = Column(String(5), nullable=True)
+    reminder_morning_last_date = Column(Date, nullable=True)
+    reminder_day_last_date = Column(Date, nullable=True)
+    reminder_evening_last_date = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
