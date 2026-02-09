@@ -3799,6 +3799,7 @@ def render_franklin_table(user: User, week_start: dt.date, page: int = 0) -> tup
         f"Фокус: {cycle_week}/13 — {focus_title}",
         "",
         "• = прокол, · = ок. Нажми клетку, чтобы поставить/убрать точку.",
+        "",
     ]
 
     marks = list_franklin_marks_for_week(user.id, week_start)
@@ -3807,13 +3808,18 @@ def render_franklin_table(user: User, week_start: dt.date, page: int = 0) -> tup
     page = max(0, min(int(page), pages - 1))
     subset = virtues[page * FRANKLIN_PAGE_SIZE : (page + 1) * FRANKLIN_PAGE_SIZE]
 
+    # Names list is shown in the message text because the 8-column keyboard makes
+    # the first column too narrow in many Telegram clients.
+    for virtue in subset:
+        is_focus = virtue.order == focus_order
+        star = "⭐" if is_focus else " "
+        lines.append(f"{star}{virtue.order}. {html.escape(virtue.title)}")
+
     today = today_iso(user.tz)
     week_key = _encode_ymd(week_start)
 
     day_labels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-    header = [
-        InlineKeyboardButton(text=f"W{cycle_week}/13", callback_data=f"virt:settings:{week_key}:{page}")
-    ]
+    header = [InlineKeyboardButton(text="⚙️", callback_data=f"virt:settings:{week_key}:{page}")]
     for i, label in enumerate(day_labels):
         d = week_start + dt.timedelta(days=i)
         header.append(
@@ -3827,8 +3833,8 @@ def render_franklin_table(user: User, week_start: dt.date, page: int = 0) -> tup
 
     for virtue in subset:
         is_focus = virtue.order == focus_order
-        prefix = "⭐" if is_focus else ""
-        left = f"{prefix}{virtue.order}. {_short_btn(virtue.title, 10)}"
+        # Keep the first column short; full name is in the message text.
+        left = f"{'⭐' if is_focus else ''}{virtue.order}"
         row = [
             InlineKeyboardButton(
                 text=left,
