@@ -4944,8 +4944,9 @@ async def on_franklin(message: Message, state: FSMContext) -> None:
     if not settings or settings.enabled is False:
         await message.answer(franklin_intro_text(), reply_markup=franklin_intro_inline())
         return
-    week_start = franklin_week_start(today_iso(user.tz))
-    text, kb = render_franklin_table(user, week_start, page=0)
+    # Default to the "day view" so the user always sees full virtue names.
+    today = today_iso(user.tz)
+    text, kb = render_franklin_day_view(user, today, page=0)
     await message.answer(text, reply_markup=kb)
 
 
