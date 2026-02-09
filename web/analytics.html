@@ -318,16 +318,13 @@
           order: 1;
         }
         #heatmapCard {
-          order: 1;
-        }
-        #goalsCard {
           order: 2;
         }
         #trendsCard {
           order: 3;
         }
         #habitsCard {
-          order: 4;
+          order: 1;
         }
       }
 
@@ -599,19 +596,9 @@
 
       .habits-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 12px;
-        align-items: start;
-      }
-      @media (max-width: 1200px) {
-        .habits-grid {
-          grid-template-columns: repeat(2, 1fr);
-        }
-      }
-      @media (max-width: 900px) {
-        .habits-grid {
-          grid-template-columns: 1fr;
-        }
+        grid-template-columns: 1fr;
+        gap: 10px;
+        align-items: stretch;
       }
       .habit {
         background: var(--card2);
@@ -646,14 +633,68 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .habit-badge {
-        padding: 6px 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
+      .habit-action {
+        width: 34px;
+        height: 34px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(var(--habit-color, 61, 220, 151), 0.14);
+        color: var(--text);
+        font-size: 16px;
+        flex: 0 0 auto;
+      }
+      .habit-action.done {
+        background: rgba(var(--habit-color, 61, 220, 151), 0.92);
+        border-color: rgba(var(--habit-color, 61, 220, 151), 0.92);
+        color: #0b0e14;
+      }
+      .habit-grid {
+        --size: 4px;
+        --gap: 2px;
+        display: grid;
+        grid-auto-flow: column;
+        grid-template-rows: repeat(7, var(--size));
+        grid-auto-columns: var(--size);
+        gap: var(--gap);
+        padding: 8px 2px 2px;
+        overflow: hidden;
+      }
+      .habit-cell {
+        width: var(--size);
+        height: var(--size);
+        border-radius: 2px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
         background: rgba(255, 255, 255, 0.04);
-        font-weight: 850;
-        font-size: 11px;
-        white-space: nowrap;
+      }
+      .habit-cell.l1 {
+        background: rgba(var(--habit-color, 61, 220, 151), 0.18);
+        border-color: rgba(var(--habit-color, 61, 220, 151), 0.22);
+      }
+      .habit-cell.l2 {
+        background: rgba(var(--habit-color, 61, 220, 151), 0.32);
+        border-color: rgba(var(--habit-color, 61, 220, 151), 0.36);
+      }
+      .habit-cell.l3 {
+        background: rgba(var(--habit-color, 61, 220, 151), 0.54);
+        border-color: rgba(var(--habit-color, 61, 220, 151), 0.58);
+      }
+      .habit-cell.l4 {
+        background: rgba(var(--habit-color, 61, 220, 151), 0.78);
+        border-color: rgba(var(--habit-color, 61, 220, 151), 0.82);
+      }
+      .habit-cell.outside {
+        opacity: 0.22;
+      }
+      .habit-cell.future {
+        opacity: 0.35;
+      }
+      @media (min-width: 720px) {
+        .habit-grid {
+          --size: 5px;
+          --gap: 2px;
+        }
       }
       .habit-chips {
         display: flex;
@@ -1283,6 +1324,14 @@
         <div class="view" id="overviewView">
           <div class="layout" id="layout">
             <div class="col main-grid">
+          <section class="card section span-2" id="habitsCard">
+            <div class="h">
+              <div class="t">✅ Привычки</div>
+              <div class="pill" id="habitsStat">—</div>
+            </div>
+            <div class="habits-grid" id="habitsGrid"></div>
+          </section>
+
           <section class="card section span-2" id="heatmapCard">
             <div class="h">
               <div class="h-left">
@@ -2481,6 +2530,7 @@
       function habitCard(tracker, dailyStats, goals, todayKey, streak, goalStreak, goalPeriod, goalProgress, xpTotal) {
         const card = document.createElement("div");
         card.className = "habit";
+        card.style.setProperty("--habit-color", habitColor(tracker));
 
         const header = document.createElement("div");
         header.className = "habit-header";
@@ -2489,73 +2539,88 @@
         title.className = "habit-title";
         const name = document.createElement("div");
         name.className = "habit-name";
-        name.textContent = tracker.name;
+        name.textContent = `${trackerIcon(tracker)} ${tracker.name}`;
         const meta = document.createElement("div");
         meta.className = "habit-meta";
         const unit = tracker.unit ? String(tracker.unit) : "";
-        const goalPeriodPref = pickGoalPeriod(goals);
-        const goalTarget = goalPeriodPref ? safeNumber(goals.get(goalPeriodPref) || 0) : 0;
-        const periodLabelShort = goalPeriodPref ? periodLabel(goalPeriodPref) : "";
-        const goalText =
-          goalTarget > 0
-            ? `цель ${goalTarget}${unit}${periodLabelShort ? `/${periodLabelShort}` : ""}`
-            : "цель: нет";
-        meta.textContent = [trackerTypeLabel(tracker), goalText].join(" · ");
+        const todayValue = miniTooltip(tracker, dailyStats ? dailyStats.get(todayKey) : null);
+        meta.textContent = [trackerTypeLabel(tracker), `сегодня: ${todayValue}`].join(" · ");
         title.appendChild(name);
         title.appendChild(meta);
 
-        const badge = document.createElement("div");
-        badge.className = "habit-badge";
-        let badgeValue = safeNumber(streak || 0);
-        let badgePeriod = tracker.streak_period || "day";
-        let badgeTitle = "Стрик по привычке";
-        if (goalPeriod) {
-          const goalValue = safeNumber(goalStreak || 0);
-          if (goalValue > 0) {
-            badgeValue = goalValue;
-            badgePeriod = goalPeriod;
-            badgeTitle = "Стрик по цели";
-          }
-        }
-        const streakSuffix = periodLabel(badgePeriod);
-        badge.textContent = `🔥 ${badgeValue}${streakSuffix ? ` ${streakSuffix}` : ""}`;
-        badge.title = `${badgeTitle}: ${badgeValue}${streakSuffix ? ` ${streakSuffix}` : ""}`;
+        const action = document.createElement("div");
+        action.className = "habit-action";
+        const doneToday = dailyActualValue(tracker, dailyStats ? dailyStats.get(todayKey) : null) > 0;
+        action.classList.toggle("done", doneToday);
+        action.textContent = doneToday ? "✅" : "➕";
+        action.title = doneToday ? "Сегодня: есть отметка" : "Сегодня: нет отметки";
 
         header.appendChild(title);
-        header.appendChild(badge);
+        header.appendChild(action);
         card.appendChild(header);
 
-        const chips = document.createElement("div");
-        chips.className = "habit-chips";
-
-        const todayChip = document.createElement("div");
-        todayChip.className = "habit-chip";
-        const todayValue = miniTooltip(tracker, dailyStats ? dailyStats.get(todayKey) : null);
-        todayChip.innerHTML = `Сегодня <strong>${todayValue}</strong>`;
-        chips.appendChild(todayChip);
-
-        const goalChip = document.createElement("div");
-        goalChip.className = "habit-chip";
-        if (goalProgress && goalProgress.target && goalPeriod) {
-          const percent = goalProgress.target > 0 ? Math.round((goalProgress.progress / goalProgress.target) * 100) : 0;
-          const period = periodLabel(goalPeriod);
-          const labelValue = formatGoalLabel(tracker, goalProgress.progress, goalProgress.target);
-          const periodSuffix = period ? ` ${period}` : "";
-          goalChip.innerHTML = `🎯 <strong>${labelValue}${periodSuffix}</strong> · ${percent}%`;
-        } else {
-          goalChip.classList.add("muted");
-          goalChip.textContent = "🎯 без цели";
-        }
-        chips.appendChild(goalChip);
-
-        const xpChip = document.createElement("div");
-        xpChip.className = "habit-chip hide-mobile";
-        xpChip.innerHTML = `XP <strong>${safeNumber(xpTotal || 0)}</strong>`;
-        chips.appendChild(xpChip);
-
-        card.appendChild(chips);
+        card.appendChild(renderHabitGrid(tracker, dailyStats, todayKey));
 
         return card;
+      }
+
+      function trackerIcon(tracker) {
+        const type = tracker && tracker.type ? String(tracker.type) : "";
+        if (type === "binary") return "✅";
+        if (type === "time") return "⏱";
+        if (type === "count") return "🔢";
+        if (type === "scale") return "⭐️";
+        return "✅";
+      }
+
+      const HABIT_COLORS = [
+        "61,220,151", // green
+        "171,118,255", // purple
+        "255,92,122", // red/pink
+        "255,204,102", // yellow
+        "88,166,255", // blue
+      ];
+
+      function habitColor(tracker) {
+        const text = String((tracker && (tracker.name || tracker.id)) || "");
+        let hash = 0;
+        for (let i = 0; i < text.length; i += 1) {
+          hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+        }
+        const idx = HABIT_COLORS.length ? hash % HABIT_COLORS.length : 0;
+        return HABIT_COLORS[idx] || HABIT_COLORS[0];
+      }
+
+      function contributionRange(todayKey, days = 365) {
+        const rawStartKey = addDaysKey(todayKey, -(days - 1));
+        const rawStartDate = keyToDate(rawStartKey);
+        const start = new Date(rawStartDate);
+        start.setUTCDate(start.getUTCDate() - weekdayMon0(start));
+        const endDate = keyToDate(todayKey);
+        const end = new Date(endDate);
+        end.setUTCDate(end.getUTCDate() + (6 - weekdayMon0(end)));
+        return { startKey: dateToKey(start), endKey: dateToKey(end), rawStartKey };
+      }
+
+      function renderHabitGrid(tracker, dailyStats, todayKey) {
+        const range = contributionRange(todayKey, 365);
+        const grid = document.createElement("div");
+        grid.className = "habit-grid";
+        let current = range.startKey;
+        while (current <= range.endKey) {
+          const cell = document.createElement("div");
+          cell.className = "habit-cell";
+          if (current < range.rawStartKey) cell.classList.add("outside");
+          if (current > todayKey) cell.classList.add("future");
+          const stat = dailyStats ? dailyStats.get(current) : null;
+          const level = miniLevel(tracker, stat);
+          if (level > 0) cell.classList.add(`l${level}`);
+          const value = miniTooltip(tracker, stat);
+          cell.title = `${current}: ${value}`;
+          grid.appendChild(cell);
+          current = addDaysKey(current, 1);
+        }
+        return grid;
       }
 
       function formatGoalLabel(tracker, progress, target) {
