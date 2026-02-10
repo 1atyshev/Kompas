@@ -651,48 +651,46 @@
         border-color: rgba(var(--habit-color, 61, 220, 151), 0.92);
         color: #0b0e14;
       }
-      .habit-grid {
-        /* Keep the full 365-day range visible while making cells visually larger.
-           The main trick: remove grid gaps and rely on subtle inner strokes instead. */
-        --gap: 0px;
+      .habit-year-grid {
+        --gap: 1px;
         --cols: 54;
-        --size: clamp(3px, calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols)), 10px);
+        --size: 4px; /* JS will resize to fit */
         display: grid;
         grid-auto-flow: column;
         grid-template-rows: repeat(7, var(--size));
         grid-auto-columns: var(--size);
         gap: var(--gap);
-        padding: 10px 2px 2px;
+        padding: 10px 0 2px;
         overflow: hidden;
         width: 100%;
       }
-      .habit-cell {
+      .habit-pixel {
         width: var(--size);
         height: var(--size);
         border-radius: 3px;
-        background: rgba(255, 255, 255, 0.06);
-        box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.04);
       }
-      .habit-cell.l1 {
+      .habit-pixel.l1 {
         background: rgba(var(--habit-color, 61, 220, 151), 0.18);
-        box-shadow: none;
+        border-color: rgba(var(--habit-color, 61, 220, 151), 0.24);
       }
-      .habit-cell.l2 {
+      .habit-pixel.l2 {
         background: rgba(var(--habit-color, 61, 220, 151), 0.32);
-        box-shadow: none;
+        border-color: rgba(var(--habit-color, 61, 220, 151), 0.38);
       }
-      .habit-cell.l3 {
+      .habit-pixel.l3 {
         background: rgba(var(--habit-color, 61, 220, 151), 0.54);
-        box-shadow: none;
+        border-color: rgba(var(--habit-color, 61, 220, 151), 0.62);
       }
-      .habit-cell.l4 {
+      .habit-pixel.l4 {
         background: rgba(var(--habit-color, 61, 220, 151), 0.78);
-        box-shadow: none;
+        border-color: rgba(var(--habit-color, 61, 220, 151), 0.86);
       }
-      .habit-cell.outside {
+      .habit-pixel.outside {
         opacity: 0.22;
       }
-      .habit-cell.future {
+      .habit-pixel.future {
         opacity: 0.35;
       }
       .habit-chips {
@@ -2337,6 +2335,11 @@
               )
             );
           }
+          requestAnimationFrame(() => sizeAllHabitYearGrids());
+          if (!_habitGridSizingSetup) {
+            _habitGridSizingSetup = true;
+            window.addEventListener("resize", () => requestAnimationFrame(() => sizeAllHabitYearGrids()));
+          }
         }
 
         state.monthlyData = {
@@ -2598,14 +2601,15 @@
       function renderHabitGrid(tracker, dailyStats, todayKey) {
         const range = contributionRange(todayKey, 365);
         const grid = document.createElement("div");
-        grid.className = "habit-grid";
+        grid.className = "habit-year-grid";
         const totalCells = Math.round((keyToDate(range.endKey) - keyToDate(range.startKey)) / 86_400_000) + 1;
         const cols = Math.max(1, Math.ceil(totalCells / 7));
         grid.style.setProperty("--cols", String(cols));
+        grid.dataset.cols = String(cols);
         let current = range.startKey;
         while (current <= range.endKey) {
           const cell = document.createElement("div");
-          cell.className = "habit-cell";
+          cell.className = "habit-pixel";
           if (current < range.rawStartKey) cell.classList.add("outside");
           if (current > todayKey) cell.classList.add("future");
           const stat = dailyStats ? dailyStats.get(current) : null;
@@ -2617,6 +2621,25 @@
           current = addDaysKey(current, 1);
         }
         return grid;
+      }
+
+      let _habitGridSizingSetup = false;
+
+      function sizeHabitYearGrid(grid) {
+        if (!grid) return;
+        const rect = grid.getBoundingClientRect();
+        const width = safeNumber(rect && rect.width ? rect.width : 0);
+        if (width <= 0) return;
+        const cols = Math.max(1, Math.trunc(safeNumber(grid.dataset.cols || grid.style.getPropertyValue("--cols") || 0)));
+        const styles = window.getComputedStyle ? window.getComputedStyle(grid) : null;
+        const gap = styles ? safeNumber(parseFloat(styles.columnGap || "0")) : 0;
+        const raw = Math.floor((width - (cols - 1) * gap) / cols);
+        const size = clamp(raw, 3, 7);
+        grid.style.setProperty("--size", `${size}px`);
+      }
+
+      function sizeAllHabitYearGrids() {
+        document.querySelectorAll(".habit-year-grid").forEach((grid) => sizeHabitYearGrid(grid));
       }
 
       function formatGoalLabel(tracker, progress, target) {
