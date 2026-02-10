@@ -652,9 +652,11 @@
         color: #0b0e14;
       }
       .habit-grid {
-        --gap: 1px;
+        /* Keep the full 365-day range visible while making cells visually larger.
+           The main trick: remove grid gaps and rely on subtle inner strokes instead. */
+        --gap: 0px;
         --cols: 54;
-        --size: clamp(5px, calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols)), 12px);
+        --size: clamp(3px, calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols)), 10px);
         display: grid;
         grid-auto-flow: column;
         grid-template-rows: repeat(7, var(--size));
@@ -668,24 +670,24 @@
         width: var(--size);
         height: var(--size);
         border-radius: 3px;
-        border: 1px solid rgba(255, 255, 255, 0.07);
-        background: rgba(255, 255, 255, 0.04);
+        background: rgba(255, 255, 255, 0.06);
+        box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
       }
       .habit-cell.l1 {
         background: rgba(var(--habit-color, 61, 220, 151), 0.18);
-        border-color: rgba(var(--habit-color, 61, 220, 151), 0.22);
+        box-shadow: none;
       }
       .habit-cell.l2 {
         background: rgba(var(--habit-color, 61, 220, 151), 0.32);
-        border-color: rgba(var(--habit-color, 61, 220, 151), 0.36);
+        box-shadow: none;
       }
       .habit-cell.l3 {
         background: rgba(var(--habit-color, 61, 220, 151), 0.54);
-        border-color: rgba(var(--habit-color, 61, 220, 151), 0.58);
+        box-shadow: none;
       }
       .habit-cell.l4 {
         background: rgba(var(--habit-color, 61, 220, 151), 0.78);
-        border-color: rgba(var(--habit-color, 61, 220, 151), 0.82);
+        box-shadow: none;
       }
       .habit-cell.outside {
         opacity: 0.22;
@@ -2537,13 +2539,7 @@
         const name = document.createElement("div");
         name.className = "habit-name";
         name.textContent = `${trackerIcon(tracker)} ${tracker.name}`;
-        const meta = document.createElement("div");
-        meta.className = "habit-meta";
-        const unit = tracker.unit ? String(tracker.unit) : "";
-        const todayValue = miniTooltip(tracker, dailyStats ? dailyStats.get(todayKey) : null);
-        meta.textContent = [trackerTypeLabel(tracker), `сегодня: ${todayValue}`].join(" · ");
         title.appendChild(name);
-        title.appendChild(meta);
 
         const action = document.createElement("div");
         action.className = "habit-action";
@@ -2600,8 +2596,7 @@
       }
 
       function renderHabitGrid(tracker, dailyStats, todayKey) {
-        // Slightly shorter range makes cells noticeably larger on mobile.
-        const range = contributionRange(todayKey, 210);
+        const range = contributionRange(todayKey, 365);
         const grid = document.createElement("div");
         grid.className = "habit-grid";
         const totalCells = Math.round((keyToDate(range.endKey) - keyToDate(range.startKey)) / 86_400_000) + 1;
