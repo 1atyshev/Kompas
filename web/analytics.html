@@ -604,13 +604,13 @@
         background: var(--card2);
         border: 1px solid var(--stroke);
         border-radius: 16px;
-        padding: 12px;
+        padding: 14px;
         display: grid;
         gap: 8px;
       }
       .habit-header {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
         gap: 10px;
       }
@@ -622,27 +622,28 @@
       }
       .habit-name {
         font-weight: 850;
+        font-size: 18px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
       .habit-meta {
         color: var(--muted);
-        font-size: 11px;
+        font-size: 12px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
       .habit-action {
-        width: 34px;
-        height: 34px;
-        border-radius: 14px;
+        width: 44px;
+        height: 44px;
+        border-radius: 999px;
         display: grid;
         place-items: center;
-        border: 1px solid rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(var(--habit-color, 61, 220, 151), 0.32);
         background: rgba(var(--habit-color, 61, 220, 151), 0.14);
         color: var(--text);
-        font-size: 16px;
+        font-size: 20px;
         flex: 0 0 auto;
       }
       .habit-action.done {
@@ -651,21 +652,23 @@
         color: #0b0e14;
       }
       .habit-grid {
-        --size: 4px;
-        --gap: 2px;
+        --gap: 1px;
+        --cols: 54;
+        --size: clamp(5px, calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols)), 8px);
         display: grid;
         grid-auto-flow: column;
         grid-template-rows: repeat(7, var(--size));
         grid-auto-columns: var(--size);
         gap: var(--gap);
-        padding: 8px 2px 2px;
+        padding: 10px 2px 2px;
         overflow: hidden;
+        width: 100%;
       }
       .habit-cell {
         width: var(--size);
         height: var(--size);
-        border-radius: 2px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
         background: rgba(255, 255, 255, 0.04);
       }
       .habit-cell.l1 {
@@ -689,12 +692,6 @@
       }
       .habit-cell.future {
         opacity: 0.35;
-      }
-      @media (min-width: 720px) {
-        .habit-grid {
-          --size: 5px;
-          --gap: 2px;
-        }
       }
       .habit-chips {
         display: flex;
@@ -2606,6 +2603,9 @@
         const range = contributionRange(todayKey, 365);
         const grid = document.createElement("div");
         grid.className = "habit-grid";
+        const totalCells = Math.round((keyToDate(range.endKey) - keyToDate(range.startKey)) / 86_400_000) + 1;
+        const cols = Math.max(1, Math.ceil(totalCells / 7));
+        grid.style.setProperty("--cols", String(cols));
         let current = range.startKey;
         while (current <= range.endKey) {
           const cell = document.createElement("div");
