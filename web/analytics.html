@@ -654,22 +654,23 @@
       .habit-year-grid {
         --gap: 1px;
         --cols: 54;
-        --size: 4px; /* JS will resize to fit */
+        --cw: 4px; /* JS will resize to fit */
+        --ch: 6px;
         display: grid;
         grid-auto-flow: column;
-        grid-template-rows: repeat(7, var(--size));
-        grid-auto-columns: var(--size);
+        grid-template-rows: repeat(7, var(--ch));
+        grid-auto-columns: var(--cw);
         gap: var(--gap);
-        padding: 10px 0 2px;
+        padding: 12px 0 4px;
         overflow: hidden;
         width: 100%;
       }
       .habit-pixel {
-        width: var(--size);
-        height: var(--size);
-        border-radius: 3px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.04);
+        width: var(--cw);
+        height: var(--ch);
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.05);
       }
       .habit-pixel.l1 {
         background: rgba(var(--habit-color, 61, 220, 151), 0.18);
@@ -2633,9 +2634,12 @@
         const cols = Math.max(1, Math.trunc(safeNumber(grid.dataset.cols || grid.style.getPropertyValue("--cols") || 0)));
         const styles = window.getComputedStyle ? window.getComputedStyle(grid) : null;
         const gap = styles ? safeNumber(parseFloat(styles.columnGap || "0")) : 0;
-        const raw = Math.floor((width - (cols - 1) * gap) / cols);
-        const size = clamp(raw, 3, 7);
-        grid.style.setProperty("--size", `${size}px`);
+        const rawW = Math.floor((width - (cols - 1) * gap) / cols);
+        const cellW = clamp(rawW, 3, 7);
+        const ratio = width < 520 ? 1.6 : 1.4; // Make rows taller on mobile like HabitKit.
+        const cellH = clamp(Math.round(cellW * ratio), 5, 10);
+        grid.style.setProperty("--cw", `${cellW}px`);
+        grid.style.setProperty("--ch", `${cellH}px`);
       }
 
       function sizeAllHabitYearGrids() {
