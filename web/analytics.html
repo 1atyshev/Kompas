@@ -654,7 +654,7 @@
       .habit-grid {
         --gap: 1px;
         --cols: 54;
-        --size: clamp(5px, calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols)), 8px);
+        --size: clamp(5px, calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols)), 12px);
         display: grid;
         grid-auto-flow: column;
         grid-template-rows: repeat(7, var(--size));
@@ -2600,7 +2600,8 @@
       }
 
       function renderHabitGrid(tracker, dailyStats, todayKey) {
-        const range = contributionRange(todayKey, 365);
+        // Slightly shorter range makes cells noticeably larger on mobile.
+        const range = contributionRange(todayKey, 210);
         const grid = document.createElement("div");
         grid.className = "habit-grid";
         const totalCells = Math.round((keyToDate(range.endKey) - keyToDate(range.startKey)) / 86_400_000) + 1;
